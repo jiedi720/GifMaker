@@ -80,6 +80,9 @@ class GifPreviewWindow:
         # 显示第一帧
         self.display_frame(0)
 
+        # 默认适应窗口
+        self.fit_to_window()
+
         # 居中显示并恢复窗口显示
         self.center_window()
         self.window.deiconify()
@@ -263,21 +266,34 @@ class GifPreviewWindow:
 
     def on_mousewheel(self, event):
         """处理鼠标滚轮事件"""
-        # 检查滚动区域是否大于Canvas可视区域，如果是则允许滚动
-        bbox = self.canvas.bbox("all")
-        if bbox:
-            canvas_width = self.canvas.winfo_width()
-            canvas_height = self.canvas.winfo_height()
+        # 检查是否按下了 Ctrl 键
+        ctrl_pressed = event.state & 0x4  # Ctrl 键的位掩码
 
-            # 如果图片的宽度或高度大于Canvas的可视区域，则允许滚动
-            if bbox[2] > canvas_width or bbox[3] > canvas_height:
-                # 检查操作系统类型来确定滚动方向
-                if event.num == 4 or event.delta > 0:
-                    # 向上滚动 - 水平滚动向左
-                    self.canvas.xview_scroll(-1, "units")
-                elif event.num == 5 or event.delta < 0:
-                    # 向下滚动 - 水平滚动向右
-                    self.canvas.xview_scroll(1, "units")
+        if ctrl_pressed:
+            # Ctrl+滚轮：缩放图片
+            if event.delta > 0 or event.num == 4:
+                # 向上滚动：放大
+                self.zoom_in()
+            elif event.delta < 0 or event.num == 5:
+                # 向下滚动：缩小
+                self.zoom_out()
+        else:
+            # 普通滚轮：滚动查看
+            # 检查滚动区域是否大于Canvas可视区域，如果是则允许滚动
+            bbox = self.canvas.bbox("all")
+            if bbox:
+                canvas_width = self.canvas.winfo_width()
+                canvas_height = self.canvas.winfo_height()
+
+                # 如果图片的宽度或高度大于Canvas的可视区域，则允许滚动
+                if bbox[2] > canvas_width or bbox[3] > canvas_height:
+                    # 检查操作系统类型来确定滚动方向
+                    if event.num == 4 or event.delta > 0:
+                        # 向上滚动 - 水平滚动向左
+                        self.canvas.xview_scroll(-1, "units")
+                    elif event.num == 5 or event.delta < 0:
+                        # 向下滚动 - 水平滚动向右
+                        self.canvas.xview_scroll(1, "units")
 
     def create_tooltip(self, widget, text):
         """创建鼠标悬浮提示"""

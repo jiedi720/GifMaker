@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-比例锁定处理器模块
-处理裁剪过程中根据预设比例实时计算并修正坐标的逻辑
+裁剪功能模块
+整合了裁剪相关的所有功能，包括比例处理、逻辑计算、状态管理和策略制定
 """
 
-from typing import Tuple, Optional, Any
+from typing import Tuple, Optional, Any, List
 from tkinter import messagebox
 from PIL import Image
+import copy
+from .history_manager import HistoryManager
 from .image_utils import auto_crop_image
 
 
@@ -211,7 +213,7 @@ class CropRatioHandler:
                 canvas_height = orig_height
 
             # 计算适应窗口的缩放比例 - 委托给业务逻辑模块
-            from .crop_logic import calculate_scaled_dimensions
+            # 使用本地函数
             scaled_width, scaled_height, fit_scale = calculate_scaled_dimensions(
                 orig_width, orig_height, canvas_width, canvas_height, padding=20
             )
@@ -232,7 +234,7 @@ class CropRatioHandler:
             y2 = int(y2_var.get())
 
             # 使用比例处理器调整坐标 - 委托给业务逻辑模块
-            from .crop_logic import apply_aspect_ratio_constraints
+            # 使用本地函数
             new_x1, new_y1, new_x2, new_y2 = apply_aspect_ratio_constraints(
                 x1, y1, x2, y2, ratio_handler.ratio_value, "lock_current"
             )
@@ -355,3 +357,275 @@ class CropRatioHandler:
                         elif event.num == 5 or event.delta < 0:
                             # 向下滚动
                             event.widget.yview_scroll(1, "units")
+
+
+class CropState:
+    """裁剪状态管理器"""
+
+    def __init__(self, max_history=100):
+        # 保存裁剪结果的字典 {图片路径: 裁剪后的PIL.Image对象}
+        self.crop_results = {}
+        # 保存裁剪坐标的字典 {图片路径: 裁剪坐标 (x1, y1, x2, y2)}
+        self.crop_coords = {}
+        # 初始化历史管理器
+        self.history_manager = HistoryManager(max_history=max_history)
+
+    def save_crop_state(self):
+        """保存当前裁剪状态到历史记录"""
+        state = {
+            'crop_results': {},
+            'crop_coords': {}
+        }
+
+        # 保存裁剪结果
+        for img_path, cropped_img in self.crop_results.items():
+            # 只保存坐标信息，不保存图片对象（避免内存问题）
+            if img_path in self.crop_coords:
+                state['crop_results'][img_path] = True  # 标记为已裁剪
+                state['crop_coords'][img_path] = self.crop_coords[img_path]
+
+        self.history_manager.save_state(state)
+
+    def undo_crop(self):
+        """撤销裁剪操作"""
+        if not self.history_manager.can_undo():
+            return False
+
+        # 获取当前状态
+        current_state = {
+            'crop_results': {path: True for path in self.crop_results.keys()},
+            'crop_coords': self.crop_coords.copy()
+        }
+
+        # 执行撤销
+        previous_state = self.history_manager.undo(current_state)
+        if previous_state:
+            # 恢复到上一个状态
+            self.crop_results.clear()
+            self.crop_coords.clear()
+
+            # 恢复裁剪结果
+            for img_path, coords in previous_state['crop_coords'].items():
+                self.crop_coords[img_path] = coords
+
+            return True
+        return False
+
+    def redo_crop(self):
+        """重做裁剪操作"""
+        if not self.history_manager.can_redo():
+            return False
+
+        # 获取当前状态
+        current_state = {
+            'crop_results': {path: True for path in self.crop_results.keys()},
+            'crop_coords': self.crop_coords.copy()
+        }
+
+        # 执行重做
+        next_state = self.history_manager.redo(current_state)
+        if next_state:
+            # 恢复到下一个状态
+            self.crop_results.clear()
+            self.crop_coords.clear()
+
+            # 恢复裁剪结果
+            for img_path, coords in next_state['crop_coords'].items():
+                self.crop_coords[img_path] = coords
+
+            return True
+        return False
+
+    def get_crop_coords(self, image_path):
+        """获取指定图片的裁剪坐标"""
+        return self.crop_coords.get(image_path, None)
+
+    def set_crop_coords(self, image_path, coords):
+        """设置指定图片的裁剪坐标"""
+        self.crop_coords[image_path] = coords
+
+    def get_crop_result(self, image_path):
+        """获取指定图片的裁剪结果"""
+        return self.crop_results.get(image_path, None)
+
+    def set_crop_result(self, image_path, result):
+        """设置指定图片的裁剪结果"""
+        self.crop_results[image_path] = result
+
+
+def find_smallest_image_path(image_paths):
+    """查找图片列表中尺寸最小的图片路径"""
+    if not image_paths:
+        return None, -1
+
+    min_size = float('inf')
+    min_path = image_paths[0]
+    min_index = 0
+
+    for i, path in enumerate(image_paths):
+        try:
+            from PIL import Image
+            img = Image.open(path)
+            width, height = img.size
+            size = width * height
+            if size < min_size:
+                min_size = size
+                min_path = path
+                min_index = i
+        except Exception as e:
+            print(f"无法读取图片尺寸 {path}: {e}")
+            continue
+
+    return min_path, min_index
+
+
+def calculate_scaled_dimensions(orig_width, orig_height, canvas_width, canvas_height, padding=20):
+    """计算适应画布的缩放尺寸"""
+    from .image_utils import calculate_scale_to_fit
+
+    # 获取适应画布的缩放比例
+    scale = calculate_scale_to_fit(orig_width, orig_height, canvas_width - padding, canvas_height - padding)
+
+    # 计算缩放后的尺寸
+    scaled_width = int(orig_width * scale)
+    scaled_height = int(orig_height * scale)
+
+    return scaled_width, scaled_height, scale
+
+
+def convert_canvas_to_image_coords(canvas_x, canvas_y, image_x, image_y, preview_scale, image_width, image_height):
+    """将画布坐标转换为图片坐标"""
+    # 计算图片在Canvas中的实际位置
+    img_left = image_x - image_width // 2
+    img_top = image_y - image_height // 2
+
+    # 转换为原始图片坐标
+    orig_x = int((canvas_x - img_left) / preview_scale)
+    orig_y = int((canvas_y - img_top) / preview_scale)
+
+    return orig_x, orig_y
+
+
+def validate_crop_coordinates(x1, y1, x2, y2, img_width, img_height):
+    """验证裁剪坐标是否有效"""
+    # 确保坐标在图片范围内
+    x1 = max(0, min(x1, img_width))
+    y1 = max(0, min(y1, img_height))
+    x2 = max(0, min(x2, img_width))
+    y2 = max(0, min(y2, img_height))
+
+    # 确保坐标顺序正确
+    if x1 > x2:
+        x1, x2 = x2, x1
+    if y1 > y2:
+        y1, y2 = y2, y1
+
+    # 确保选框有效（宽度、高度至少为1）
+    if x2 - x1 < 1:
+        x2 = x1 + 1
+    if y2 - y1 < 1:
+        y2 = y1 + 1
+
+    return x1, y1, x2, y2
+
+
+def calculate_aspect_ratio(width, height):
+    """计算宽高比"""
+    if height > 0:
+        return width / height
+    else:
+        return 0.0
+
+
+def apply_aspect_ratio_constraints(x1, y1, x2, y2, aspect_ratio, constraint_type="lock_current"):
+    """应用宽高比约束"""
+    if constraint_type == "free" or aspect_ratio is None:
+        return x1, y1, x2, y2
+
+    width = abs(x2 - x1)
+    height = abs(y2 - y1)
+
+    if width == 0 or height == 0:
+        return x1, y1, x2, y2
+
+    # 根据宽高比调整尺寸
+    if constraint_type in ['nw', 'ne', 'sw', 'se']:
+        # 角点：根据宽度调整高度
+        new_height = int(width / aspect_ratio)
+        if constraint_type in ['nw', 'sw']:
+            y1 = y2 - new_height
+        else:
+            y2 = y1 + new_height
+    elif constraint_type in ['n', 's']:
+        # 上下边：根据高度调整宽度
+        new_width = int(height * aspect_ratio)
+        x2 = x1 + new_width
+    elif constraint_type in ['e', 'w']:
+        # 左右边：根据宽度调整高度
+        new_height = int(width / aspect_ratio)
+        y2 = y1 + new_height
+
+    # 确保选框有效
+    if abs(x2 - x1) < 1:
+        if constraint_type in ['nw', 'w', 'sw']:
+            x1 = x2 - 1
+        else:
+            x2 = x1 + 1
+    if abs(y2 - y1) < 1:
+        if constraint_type in ['nw', 'n', 'ne']:
+            y1 = y2 - 1
+        else:
+            y2 = y1 + 1
+
+    return x1, y1, x2, y2
+
+
+def determine_crop_strategy(image_paths: List[str], current_index: int) -> Tuple[bool, str, int]:
+    """确定裁剪策略
+
+    Args:
+        image_paths: 图片路径列表
+        current_index: 当前图片索引
+
+    Returns:
+        tuple: (is_base_image, current_image_path, current_index)
+    """
+    if not image_paths:
+        return False, '', -1
+
+    is_base_image = False
+    current_image_path = ''
+
+    if len(image_paths) > 1:
+        # 多张图片的情况，需要找到尺寸最小的作为基准
+        min_size = float('inf')
+        min_path = image_paths[0]
+        min_index = 0
+
+        for i, path in enumerate(image_paths):
+            try:
+                from PIL import Image
+                img = Image.open(path)
+                width, height = img.size
+                size = width * height
+                if size < min_size:
+                    min_size = size
+                    min_path = path
+                    min_index = i
+            except Exception as e:
+                print(f"无法读取图片尺寸 {path}: {e}")
+                continue
+
+        current_image_path = min_path
+        current_index = min_index
+
+        # 如果传入的当前图片路径不是最小尺寸的图片，则使用最小尺寸的图片作为基准
+        if image_paths[current_index] != min_path:
+            is_base_image = True
+    else:
+        # 只有一张图片，直接使用
+        current_image_path = image_paths[current_index] if 0 <= current_index < len(image_paths) else image_paths[0] if image_paths else ''
+
+    return is_base_image, current_image_path, current_index
+
+

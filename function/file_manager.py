@@ -159,3 +159,38 @@ def estimate_gif_size(image_paths: list) -> float:
     total_original_size = sum(os.path.getsize(path)/1024 for path in image_paths)  # KB
     estimated_gif_size = total_original_size * 0.3  # 估算为原始大小的30%
     return estimated_gif_size
+
+
+def is_single_image_mode(image_paths: list) -> bool:
+    """判断是否为单张图片模式
+
+    Args:
+        image_paths: 图片路径列表
+
+    Returns:
+        bool: 是否为单张图片模式
+    """
+    return len(image_paths) <= 1
+
+
+def get_target_paths(selected_indices: set, all_paths: list) -> list:
+    """获取目标路径列表
+
+    Args:
+        selected_indices: 选中的索引集合
+        all_paths: 所有路径列表
+
+    Returns:
+        list: 目标路径列表
+    """
+    if selected_indices and len(selected_indices) > 1:
+        # 多选模式
+        target_indices = sorted(list(selected_indices))
+        return [all_paths[i] for i in target_indices if 0 <= i < len(all_paths)]
+    else:
+        # 单选模式
+        if selected_indices:
+            idx = list(selected_indices)[0]
+            if 0 <= idx < len(all_paths):
+                return [all_paths[idx]]
+        return []

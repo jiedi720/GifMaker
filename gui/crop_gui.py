@@ -22,17 +22,7 @@ from function.image_utils import (
     crop_image,
     auto_crop_image
 )
-from function.crop_state import CropState
-from function.crop_handler import CropRatioHandler
-from function.crop_logic import (
-    find_smallest_image_path,
-    calculate_scaled_dimensions,
-    convert_canvas_to_image_coords,
-    validate_crop_coordinates,
-    calculate_aspect_ratio,
-    apply_aspect_ratio_constraints
-)
-from function.crop_strategy import determine_crop_strategy
+from function.crop import CropState, CropRatioHandler, find_smallest_image_path, calculate_scaled_dimensions, convert_canvas_to_image_coords, validate_crop_coordinates, calculate_aspect_ratio, apply_aspect_ratio_constraints, determine_crop_strategy
 from function.widget_utils import ensure_widget_rendered
 
 class CropDialog:
@@ -132,7 +122,7 @@ class CropDialog:
                 self.initial_scale = self.preview_scale  # 保存初始缩放比例
 
             # 计算实际显示尺寸 - 委托给业务逻辑模块
-            from function.crop_logic import calculate_scaled_dimensions
+            from function.crop import calculate_scaled_dimensions
             scaled_width, scaled_height, scale = calculate_scaled_dimensions(
                 orig_width, orig_height, canvas_width, canvas_height
             )
@@ -642,7 +632,7 @@ class CropDialog:
             new_y2 = y2 + img_dy
 
             # 确保选框在图片范围内 - 委托给业务逻辑模块
-            from function.crop_logic import validate_crop_coordinates
+            from function.crop import validate_crop_coordinates
             new_x1, new_y1, new_x2, new_y2 = validate_crop_coordinates(
                 new_x1, new_y1, new_x2, new_y2, self.original_image.width, self.original_image.height
             )
@@ -694,7 +684,7 @@ class CropDialog:
                 x1, y1, x2, y2 = self.ratio_handler.adjust_coords_by_ratio(x1, y1, x2, y2, self.dragging_handle)
 
             # 确保选框有效（宽度、高度至少为1�? 委托给业务逻辑模块
-            from function.crop_logic import validate_crop_coordinates
+            from function.crop import validate_crop_coordinates
             x1, y1, x2, y2 = validate_crop_coordinates(
                 x1, y1, x2, y2, self.original_image.width, self.original_image.height
             )
@@ -749,7 +739,7 @@ class CropDialog:
                 )
 
                 # 确保坐标顺序正确 - 委托给业务逻辑模块
-                from function.crop_logic import validate_crop_coordinates
+                from function.crop import validate_crop_coordinates
                 orig_x1, orig_y1, orig_x2, orig_y2 = validate_crop_coordinates(
                     orig_x1, orig_y1, orig_x2, orig_y2, self.original_image.width, self.original_image.height
                 )

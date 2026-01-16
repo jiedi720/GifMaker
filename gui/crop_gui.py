@@ -17,11 +17,10 @@ from function.image_utils import (
     resize_image,
     create_photo_image,
     calculate_scale_to_fit,
-    calculate_scale_to_fill,
-    crop_image
+    calculate_scale_to_fill
 )
 from function.crop import CropState, CropRatioHandler, find_smallest_image_path, calculate_scaled_dimensions, convert_canvas_to_image_coords, validate_crop_coordinates, calculate_aspect_ratio, apply_aspect_ratio_constraints, determine_crop_strategy
-from function.widget_utils import ensure_widget_rendered
+from function.ui_operations import ensure_widget_rendered
 
 class CropDialog:
     """裁剪对话框类"""

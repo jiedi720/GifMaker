@@ -108,27 +108,7 @@ def calculate_scale_to_fill(image_width, image_height, canvas_width, canvas_heig
     return max(scale_width, scale_height)
 
 
-def crop_image(image, x1, y1, x2, y2):
-    """
-    裁剪图片
 
-    Args:
-        image: PIL.Image对象
-        x1: 左上角x坐标
-        y1: 左上角y坐标
-        x2: 右下角x坐标
-        y2: 右下角y坐标
-
-    Returns:
-        裁剪后的PIL.Image对象
-    """
-    # 确保坐标在图片范围内
-    x1 = max(0, min(x1, image.width))
-    y1 = max(0, min(y1, image.height))
-    x2 = max(x1, min(x2, image.width))
-    y2 = max(y1, min(y2, image.height))
-
-    return image.crop((x1, y1, x2, y2))
 
 
 def get_image_info(image_path):
@@ -168,44 +148,50 @@ def get_image_info(image_path):
         return None
 
 
-def calculate_grid_layout(num_images, canvas_width, canvas_height, preview_scale=1.0, thumbnail_size=(200, 150)):
+def calculate_grid_layout(image_paths, pending_crops, preview_scale=1.0, thumbnail_size=(200, 150), canvas_width=None, canvas_height=None):
     """
     计算网格布局，返回每张图片的位置和大小
 
     Args:
-        num_images: 图片数量
-        canvas_width: Canvas宽度
-        canvas_height: Canvas高度
+        image_paths: 图片路径列表
+        pending_crops: 待裁剪的图片集合
         preview_scale: 预览缩放比例
         thumbnail_size: 缩略图大小 (width, height)
+        canvas_width: Canvas宽度（可选，默认800）
+        canvas_height: Canvas高度（可选，默认600）
 
     Returns:
         包含布局信息的字典列表，每个字典包含:
         {
             'index': 图片索引,
-            'x': x坐标,
-            'y': y坐标,
-            'width': 宽度,
-            'height': 高度,
+            'path': 图片路径,
+            'position': (x, y) 坐标元组,
+            'size': (width, height) 尺寸元组,
             'col': 列索引,
-            'row': 行索引
+            'row': 行索引,
+            'is_cropped': 是否已裁剪
         }
     """
-    if num_images == 0:
+    if not image_paths:
         return []
 
     # 计算可用的缩略图大小
     thumb_width = int(thumbnail_size[0] * preview_scale)
     thumb_height = int(thumbnail_size[1] * preview_scale)
 
-    # 计算每行可以放多少张图片
+    # 使用传入的Canvas尺寸或默认值
+    if canvas_width is None:
+        canvas_width = 800
+    if canvas_height is None:
+        canvas_height = 600
+
     padding = 10
     cols = max(1, int(canvas_width / (thumb_width + padding)))
-    rows = (num_images + cols - 1) // cols
+    rows = (len(image_paths) + cols - 1) // cols
 
     layout = []
 
-    for i in range(num_images):
+    for i, img_path in enumerate(image_paths):
         col = i % cols
         row = i // cols
 
@@ -214,12 +200,12 @@ def calculate_grid_layout(num_images, canvas_width, canvas_height, preview_scale
 
         layout.append({
             'index': i,
-            'x': x,
-            'y': y,
-            'width': thumb_width,
-            'height': thumb_height,
+            'path': img_path,
+            'position': (x, y),
+            'size': (thumb_width, thumb_height),
             'col': col,
-            'row': row
+            'row': row,
+            'is_cropped': img_path in pending_crops
         })
 
     return layout

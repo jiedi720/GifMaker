@@ -14,7 +14,8 @@ from PIL import Image, ImageTk
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 导入功能模块
-from function.image_utils import load_image, crop_image, get_image_info, resize_image, create_photo_image, calculate_scale_to_fit, calculate_scale_to_fill
+from function.image_utils import load_image, get_image_info, resize_image, create_photo_image, calculate_scale_to_fit, calculate_scale_to_fill
+from function.crop import crop_image
 from function.history_manager import HistoryManager
 from function.file_manager import get_image_files, validate_image_path, get_file_size_kb
 from function.gif_operations import create_gif
@@ -273,7 +274,7 @@ class GifMakerGUI:
 
         # 生成GIF按钮
         from function.gif_operations import create_gif_from_gui
-        btn_create_gif = ttk.Button(control_frame, text="生成", command=lambda: create_gif_from_gui(self), width=5)
+        btn_create_gif = ttk.Button(control_frame, text="🚀", command=lambda: create_gif_from_gui(self), width=5)
         btn_create_gif.pack(side=tk.LEFT, padx=(0, 3))
         self.create_tooltip(btn_create_gif, "生成GIF")
 
@@ -550,6 +551,32 @@ class GifMakerGUI:
         self.preview_canvas.delete("all")
         self.image_rects.clear()
         self.preview_photos.clear()  # 清空PhotoImage列表
+
+        # 更新文件列表下拉框
+        if self.image_paths:
+            file_names = [os.path.basename(p) for p in self.image_paths]
+            self.file_combobox['values'] = file_names
+            if self.selected_image_index >= 0 and self.selected_image_index < len(file_names):
+                self.file_combobox.current(self.selected_image_index)
+            elif len(file_names) > 0:
+                self.file_combobox.current(0)
+        else:
+            self.file_combobox['values'] = []
+            self.file_combobox.set('')
+
+        # 获取Canvas实际尺寸
+        self.preview_canvas.update_idletasks()
+        canvas_width = self.preview_canvas.winfo_width()
+        canvas_height = self.preview_canvas.winfo_height()
+
+        # 重新计算布局，使用实际的Canvas尺寸
+        layout_data = calculate_grid_layout(
+            self.image_paths,
+            self.pending_crops,
+            self.preview_scale,
+            canvas_width=canvas_width,
+            canvas_height=canvas_height
+        )
 
         # 遍历布局数据，显示每张图片
         for item in layout_data:

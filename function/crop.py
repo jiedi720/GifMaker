@@ -570,3 +570,25 @@ def determine_crop_strategy(image_paths: List[str], current_index: int) -> Tuple
     return is_base_image, current_image_path, current_index
 
 
+def crop_image(image, x1, y1, x2, y2):
+    """
+    裁剪图片
+
+    Args:
+        image: PIL.Image对象
+        x1: 左上角x坐标
+        y1: 左上角y坐标
+        x2: 右下角x坐标
+        y2: 右下角y坐标
+
+    Returns:
+        裁剪后的PIL.Image对象
+    """
+    x1 = max(0, min(x1, image.width))
+    y1 = max(0, min(y1, image.height))
+    x2 = max(x1, min(x2, image.width))
+    y2 = max(y1, min(y2, image.height))
+
+    return image.crop((x1, y1, x2, y2))
+
+

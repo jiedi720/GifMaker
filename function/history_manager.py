@@ -441,7 +441,8 @@ def redo(main_window_instance):
                 print(f"  需要添加的裁剪: {list(to_add)}")
                 for img_path in to_add:
                     # 重新加载图片并应用裁剪
-                    from function.image_utils import load_image, crop_image
+                    from function.image_utils import load_image
+                    from function.crop import crop_image
                     img = load_image(img_path)
                     if img and img_path in next_state['pending_crops']:
                         crop_data = next_state['pending_crops'][img_path]

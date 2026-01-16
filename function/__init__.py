@@ -8,9 +8,10 @@ from .image_utils import (
     resize_image,
     create_photo_image,
     calculate_scale_to_fit,
-    calculate_scale_to_fill,
-    crop_image
+    calculate_scale_to_fill
 )
+
+from .crop import crop_image
 
 __all__ = [
     'load_image',

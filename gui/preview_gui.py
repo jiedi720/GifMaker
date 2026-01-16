@@ -101,8 +101,16 @@ class GifPreviewWindow:
         self.window.update_idletasks()
         width = self.window.winfo_width()
         height = self.window.winfo_height()
-        x = (self.window.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.window.winfo_screenheight() // 2) - (height // 2)
+        
+        # 如果窗口还没有显示，使用设置的默认尺寸
+        if width <= 1 or height <= 1:
+            width = 800
+            height = 450
+        
+        screen_width = self.window.winfo_screenwidth()
+        screen_height = self.window.winfo_screenheight()
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
         self.window.geometry(f'{width}x{height}+{x}+{y}')
 
     def setup_ui(self):
@@ -130,7 +138,8 @@ class GifPreviewWindow:
         self.scroll_x = ttk.Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
         self.canvas.configure(yscrollcommand=self.scroll_y.set, xscrollcommand=self.scroll_x.set)
 
-        # 布局Canvas和滚动条 - 使用grid管理?        self.canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # 布局Canvas和滚动条 - 使用grid管理器
+        self.canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.scroll_y.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.scroll_x.grid(row=1, column=0, sticky=(tk.W, tk.E))
 
@@ -176,7 +185,8 @@ class GifPreviewWindow:
         control_frame2 = ttk.Frame(main_frame)
         control_frame2.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(5, 5))
 
-        # 创建一个居中容?        center_container2 = ttk.Frame(control_frame2)
+        # 创建一个居中容器
+        center_container2 = ttk.Frame(control_frame2)
         center_container2.pack(expand=True)
 
         # 左侧容器：持续时间调节和保存按钮
@@ -196,14 +206,16 @@ class GifPreviewWindow:
         )
         self.duration_spin.pack(side=tk.LEFT, padx=(0, 10))
 
-        # 分隔?        ttk.Separator(left_container, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        # 分隔线
+        ttk.Separator(left_container, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
 
         # 保存按钮
         save_button = ttk.Button(left_container, text="💾", command=self.save_gif, width=5)
         save_button.pack(side=tk.LEFT)
         self.create_tooltip(save_button, "保存GIF")
 
-        # 分隔?        ttk.Separator(center_container2, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        # 分隔线
+        ttk.Separator(center_container2, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
 
         # 中间容器：帧导航按钮（居中）
         middle_container = ttk.Frame(center_container2)
@@ -225,9 +237,11 @@ class GifPreviewWindow:
         btn_last.pack(side=tk.LEFT, padx=(0, 5))
         self.create_tooltip(btn_last, "最后一帧")
 
-        # 分隔?        ttk.Separator(center_container2, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        # 分隔线
+        ttk.Separator(center_container2, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
 
-        # 右侧容器：缩放控制按?        right_container = ttk.Frame(center_container2)
+        # 右侧容器：缩放控制按钮
+        right_container = ttk.Frame(center_container2)
         right_container.pack(side=tk.LEFT)
 
         btn_zoom_in = ttk.Button(right_container, text="🔍+", command=self.zoom_in, width=5)
@@ -313,11 +327,13 @@ class GifPreviewWindow:
 
             # 计算基础缩放比例（使用当前窗口大小，考虑控制栏空间）
             self.canvas_frame.update_idletasks()
-            # 获取canvas的实际可用空?            canvas_width = self.canvas.winfo_width()
+            # 获取canvas的实际可用空间
+            canvas_width = self.canvas.winfo_width()
             canvas_height = self.canvas.winfo_height()
 
             # 减去滚动条的空间
-            scrollbar_width = 15  # 滚动条宽度估计?            max_width = canvas_width - scrollbar_width - 20 if canvas_width > 0 else orig_width
+            scrollbar_width = 15  # 滚动条宽度估计值
+            max_width = canvas_width - scrollbar_width - 20 if canvas_width > 0 else orig_width
             max_height = canvas_height - scrollbar_width - 20 if canvas_height > 0 else orig_height
 
             if max_width < 50:
@@ -325,9 +341,10 @@ class GifPreviewWindow:
             if max_height < 50:
                 max_height = orig_height
 
-            # 计算基础缩放比例，保持宽高比（用于初始适应窗口?            base_scale = min(max_width / orig_width, max_height / orig_height)
+            # 计算基础缩放比例，保持宽高比（用于初始适应窗口）
+            base_scale = min(max_width / orig_width, max_height / orig_height)
 
-            # 应用缩放比例：当zoom_scale?.0时，始终使用原始尺寸显示
+            # 应用缩放比例：当zoom_scale为1.0时，始终使用原始尺寸显示
             # 这样可以保证100%缩放时显示原始尺寸，即使图片大于窗口
             if self.zoom_scale == 1.0:
                 scale = 1.0  # 始终显示原始尺寸
@@ -339,7 +356,8 @@ class GifPreviewWindow:
             display_width = int(orig_width * scale)
             display_height = int(orig_height * scale)
 
-            # 创建缓存键，包含帧索引和显示尺寸（使用整数避免浮点数精度问题?            cache_key = (frame_index, display_width, display_height)
+            # 创建缓存键，包含帧索引和显示尺寸（使用整数避免浮点数精度问题）
+            cache_key = (frame_index, display_width, display_height)
 
             # 检查缓存中是否已有该帧的PhotoImage
             if cache_key in self.photo_cache:
@@ -362,25 +380,31 @@ class GifPreviewWindow:
             # 先更新Canvas上的图片
             self.canvas.itemconfig(self.image_id, image=self.photo)
 
-            # 更新Canvas上的图片位置和锚?            # 当图片大于窗口时，将图片放置在左上角(0, 0)，方便滚动查?            # 当图片小于窗口时，将图片居中显示
+            # 更新Canvas上的图片位置和锚点
+            # 当图片大于窗口时，将图片放置在左上角(0, 0)，方便滚动查看
+            # 当图片小于窗口时，将图片居中显示
             canvas_width = self.canvas.winfo_width()
             canvas_height = self.canvas.winfo_height()
 
             if display_width > canvas_width or display_height > canvas_height:
-                # 图片大于窗口，放置在左上角（使用NW锚点?                self.canvas.itemconfig(self.image_id, anchor=tk.NW)
+                # 图片大于窗口，放置在左上角（使用NW锚点）
+                self.canvas.itemconfig(self.image_id, anchor=tk.NW)
                 self.canvas.coords(self.image_id, 0, 0)
             else:
-                # 图片小于窗口，居中显示（使用CENTER锚点?                self.canvas.itemconfig(self.image_id, anchor=tk.CENTER)
+                # 图片小于窗口，居中显示（使用CENTER锚点）
+                self.canvas.itemconfig(self.image_id, anchor=tk.CENTER)
                 center_x = canvas_width // 2
                 center_y = canvas_height // 2
                 self.canvas.coords(self.image_id, center_x, center_y)
 
-            # 更新当前帧索?            self.current_frame_index = frame_index
+            # 更新当前帧索引
+            self.current_frame_index = frame_index
             self.progress_var.set(frame_index)
             self.update_frame_label()
 
             # 更新滚动区域 - 确保滚动区域包含整个图片
-            # 使用after确保在所有UI更新完成后设置滚动区?            self.canvas.after(10, lambda: self.canvas.configure(scrollregion=(0, 0, display_width, display_height)))
+            # 使用after确保在所有UI更新完成后设置滚动区域
+            self.canvas.after(10, lambda: self.canvas.configure(scrollregion=(0, 0, display_width, display_height)))
 
     def update_frame_label(self):
         """更新帧数显示"""
@@ -450,9 +474,10 @@ class GifPreviewWindow:
         if canvas_height < 50:
             canvas_height = orig_height
 
-        # 计算适应窗口的缩放比?        scale_width = canvas_width / orig_width
+        # 计算适应窗口的缩放比例
+        scale_width = canvas_width / orig_width
         scale_height = canvas_height / orig_height
-        fit_scale = min(scale_width, scale_height)  # 保持宽高?
+        fit_scale = min(scale_width, scale_height)  # 保持宽高比
         # 更新缩放比例
         self.zoom_scale = fit_scale
         # 清除缓存，因为缩放比例改变了
@@ -495,7 +520,8 @@ class GifPreviewWindow:
         if not self.is_playing:
             return
 
-        # 移动到下一?        next_frame = (self.current_frame_index + 1) % len(self.frames)
+        # 移动到下一帧
+        next_frame = (self.current_frame_index + 1) % len(self.frames)
         self.display_frame(next_frame)
 
         # 继续播放，使用当前的持续时间

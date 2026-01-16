@@ -60,8 +60,6 @@ class CropDialog:
 
         self.crop_state = CropState(max_history=100)
 
-
-        from function.crop_strategy import determine_crop_strategy
         self.is_base_image, self.min_image_path, min_idx = determine_crop_strategy(self.image_paths, current_index)
         self.min_image_size = min_idx
         #   - 1280x720
@@ -93,8 +91,16 @@ class CropDialog:
         self.dialog.update_idletasks()
         width = self.dialog.winfo_width()
         height = self.dialog.winfo_height()
-        x = (self.dialog.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.dialog.winfo_screenheight() // 2) - (height // 2)
+        
+        # 如果窗口还没有显示，使用设置的默认尺寸
+        if width <= 1 or height <= 1:
+            width = 1280
+            height = 720
+        
+        screen_width = self.dialog.winfo_screenwidth()
+        screen_height = self.dialog.winfo_screenheight()
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
         self.dialog.geometry(f'{width}x{height}+{x}+{y}')
 
     def display_image(self):
@@ -216,9 +222,10 @@ class CropDialog:
         
         self.right_panel.columnconfigure(0, weight=0)
         self.modules_container = ttk.Frame(self.right_panel, width=320)
-        self.modules_container.grid(row=0, column=0, sticky="n")  #   e/w，
+        self.modules_container.grid(row=0, column=0, sticky="n")
         
-        #  2.1         coord_title = "" + ("（）" if self.is_base_image else "")
+        # 2.1 坐标设置
+        coord_title = "" + ("（基准图）" if self.is_base_image else "")
         coord_group = ttk.LabelFrame(self.modules_container, text=coord_title, padding=5)
         coord_group.pack(fill="x", pady=(0, 15), ipadx=10)
         
@@ -241,7 +248,8 @@ class CropDialog:
         self.size_label = ttk.Label(size_frame, text="尺寸: 100 x 100 像素", font=("Microsoft YaHei UI", 9))
         self.size_label.pack(anchor="w")
 
-        #  2.2         ratio_group = ttk.LabelFrame(self.modules_container, text="", padding=5)
+        # 2.2 比例设置
+        ratio_group = ttk.LabelFrame(self.modules_container, text="比例设置", padding=5)
         ratio_group.pack(fill="x", pady=(0, 15), ipadx=10)
         
 
@@ -249,8 +257,7 @@ class CropDialog:
         ratio_group.columnconfigure(1, weight=0)
 
         self.ratio_var = tk.StringVar(value="free")
-        from function.ui_operations import on_ratio_change
-        self.ratio_var.trace_add('write', lambda *args: on_ratio_change(
+        self.ratio_var.trace_add('write', lambda *args: self.ratio_handler.on_ratio_change(
             self.ratio_var,
             self.x1_var,
             self.y1_var,
@@ -289,7 +296,8 @@ class CropDialog:
                 rb = ttk.Radiobutton(ratio_group, text=text, variable=self.ratio_var, value=value)
                 rb.grid(row=row, column=col, sticky="w", padx=5, pady=2)
 
-        #  2.3         option_group = ttk.LabelFrame(self.modules_container, text="", padding=5)
+        # 2.3 选项设置
+        option_group = ttk.LabelFrame(self.modules_container, text="选项", padding=5)
         option_group.pack(fill="x", pady=(0, 15), ipadx=10)
         
         option_group.columnconfigure(0, weight=0)
@@ -309,8 +317,8 @@ class CropDialog:
             cb = ttk.Checkbutton(option_group, text=text, variable=var)
             cb.grid(row=i, column=0, sticky="w", padx=5, pady=5)
 
-
-        #          ttk.Separator(self.modules_container, orient="horizontal").pack(fill="x", pady=(10, 10))
+        # 分隔线
+        ttk.Separator(self.modules_container, orient="horizontal").pack(fill="x", pady=(10, 10))
         
         btn_row1 = ttk.Frame(self.modules_container)
         btn_row1.pack(fill="x", pady=(0, 5))
@@ -391,7 +399,8 @@ class CropDialog:
             return
 
         try:
-            #  .0，            self.preview_scale = 1.0
+            # 重置缩放比例为1.0
+            self.preview_scale = 1.0
 
             self.display_image()
 
@@ -434,7 +443,8 @@ class CropDialog:
 
 
             if len(self.image_paths) > 1 and self.is_base_image:
-                #                  base_width = self.original_image.width
+                # 获取基准图片宽度
+                base_width = self.original_image.width
                 base_height = self.original_image.height
 
                 confirm = messagebox.askyesno(
@@ -598,7 +608,8 @@ class CropDialog:
             dx = event.x - self.move_start_pos[0]
             dy = event.y - self.move_start_pos[1]
 
-            #              img_dx = int(dx / self.preview_scale)
+            # 计算图片坐标的移动距离
+            img_dx = int(dx / self.preview_scale)
             img_dy = int(dy / self.preview_scale)
 
             x1, y1, x2, y2 = self.move_start_coords
@@ -632,24 +643,29 @@ class CropDialog:
             dx = event.x - self.drag_start_pos[0]
             dy = event.y - self.drag_start_pos[1]
 
-            #              img_dx = int(dx / self.preview_scale)
+            # 计算图片坐标的移动距离
+            img_dx = int(dx / self.preview_scale)
             img_dy = int(dy / self.preview_scale)
 
             x1, y1, x2, y2 = self.drag_start_coords
 
-            if self.dragging_handle == 'nw':  #                  x1 = max(0, x1 + img_dx)
+            if self.dragging_handle == 'nw':  # 左上角
+                x1 = max(0, x1 + img_dx)
                 y1 = max(0, y1 + img_dy)
             elif self.dragging_handle == 'n':
                 y1 = max(0, y1 + img_dy)
-            elif self.dragging_handle == 'ne':  #                  x2 = min(self.original_image.width, x2 + img_dx)
+            elif self.dragging_handle == 'ne':  # 右上角
+                x2 = min(self.original_image.width, x2 + img_dx)
                 y1 = max(0, y1 + img_dy)
             elif self.dragging_handle == 'e':
                 x2 = min(self.original_image.width, x2 + img_dx)
-            elif self.dragging_handle == 'se':  #                  x2 = min(self.original_image.width, x2 + img_dx)
+            elif self.dragging_handle == 'se':  # 右下角
+                x2 = min(self.original_image.width, x2 + img_dx)
                 y2 = min(self.original_image.height, y2 + img_dy)
             elif self.dragging_handle == 's':
                 y2 = min(self.original_image.height, y2 + img_dy)
-            elif self.dragging_handle == 'sw':  #                  x1 = max(0, x1 + img_dx)
+            elif self.dragging_handle == 'sw':  # 左下角
+                x1 = max(0, x1 + img_dx)
                 y2 = min(self.original_image.height, y2 + img_dy)
             elif self.dragging_handle == 'w':
                 x1 = max(0, x1 + img_dx)
@@ -832,7 +848,8 @@ class CropDialog:
                 tags="selection_box"
             )
 
-            #  8（4 + 4            handle_size = 10
+            # 绘制8个控制点（4个角点 + 4个中点）
+            handle_size = 10
             handle_offset = handle_size // 2
 
             handles = {

@@ -71,7 +71,7 @@ def select_images(main_window_instance):
     选择图片文件
     打开文件选择对话框，让用户选择要制作GIF的图片文件
     """
-    # 打开文件选择对话框，支持多种图片格式
+
     files = filedialog.askopenfilenames(
         title="选择图片文件",
         filetypes=[
@@ -80,12 +80,10 @@ def select_images(main_window_instance):
         ]
     )
     if files:
-        # 避免重复添加文件
         main_window_instance.image_paths = remove_duplicates_preserve_order(
             main_window_instance.image_paths + list(files)
         )
-        from function.ui_operations import update_image_list
-        update_image_list(main_window_instance)
+        main_window_instance.display_grid_preview()
 
 
 def select_directory(main_window_instance):
@@ -93,18 +91,14 @@ def select_directory(main_window_instance):
     选择包含图片的目录
     打开目录选择对话框，自动获取目录中所有图片文件
     """
-    # 打开目录选择对话框
     directory = filedialog.askdirectory(title="选择包含图片的目录")
     if directory:
-        # 获取目录中的所有图片文件
         image_files = get_image_files(directory)
-        # 避免重复添加文件
         main_window_instance.image_paths = remove_duplicates_preserve_order(
             main_window_instance.image_paths + image_files
         )
-        # 更新图片列表并显示网格预览
-        from function.ui_operations import update_image_list
-        update_image_list(main_window_instance)
+        # 更新图片列表显示
+        main_window_instance.display_grid_preview()
 
 
 def clear_images(main_window_instance):
@@ -112,20 +106,17 @@ def clear_images(main_window_instance):
     清空图片列表
     清除所有已选择的图片路径
     """
-    # 保存当前状态到历史栈
     from function.history_manager import save_state as save_main_window_state
     save_main_window_state(main_window_instance)
 
     main_window_instance.image_paths = []
-    # 清空多选
     main_window_instance.selected_image_indices = set()
     main_window_instance.selected_image_index = -1
     main_window_instance.last_selected_index = -1
-    from function.ui_operations import update_image_list
-    update_image_list(main_window_instance)
+    main_window_instance.display_grid_preview()
 
 
-# ========== 参数验证相关函数 ==========
+
 
 def calculate_total_time(num_images: int, duration_ms: int) -> tuple:
     """计算GIF总时间"""
@@ -157,7 +148,7 @@ def validate_gif_params(image_paths, output_path, resize_width, resize_height):
 def estimate_gif_size(image_paths: list) -> float:
     """估算GIF大小"""
     total_original_size = sum(os.path.getsize(path)/1024 for path in image_paths)  # KB
-    estimated_gif_size = total_original_size * 0.3  # 估算为原始大小的30%
+    estimated_gif_size = total_original_size * 0.3  #  30%
     return estimated_gif_size
 
 
@@ -184,11 +175,9 @@ def get_target_paths(selected_indices: set, all_paths: list) -> list:
         list: 目标路径列表
     """
     if selected_indices and len(selected_indices) > 1:
-        # 多选模式
         target_indices = sorted(list(selected_indices))
         return [all_paths[i] for i in target_indices if 0 <= i < len(all_paths)]
     else:
-        # 单选模式
         if selected_indices:
             idx = list(selected_indices)[0]
             if 0 <= idx < len(all_paths):

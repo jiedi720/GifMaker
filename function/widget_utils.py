@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 UI助手模块
 提供异步初始化策略和其他UI相关辅助功能
@@ -24,9 +25,8 @@ def ensure_widget_rendered(widget: tk.Widget, callback: Callable):
         widget: Tkinter组件对象
         callback: 回调函数
     """
-    # 更新组件以确保渲染完成
     widget.update_idletasks()
-    # 延迟执行回调，确保所有渲染完成
+
     widget.after(10, callback)
 
 
@@ -39,13 +39,13 @@ def get_actual_dimensions(canvas: tk.Canvas) -> tuple:
     Returns:
         tuple: (width, height)
     """
-    # 确保UI更新完成
+    #  UI
     canvas.update_idletasks()
 
     width = canvas.winfo_width()
     height = canvas.winfo_height()
 
-    # 如果获取到的尺寸不合理，使用默认值
+
     if width < 10 or height < 10:
         width = 800
         height = 600
@@ -67,9 +67,8 @@ def fit_to_window_strategy(canvas: tk.Canvas, orig_width: int, orig_height: int,
     """
     canvas_width, canvas_height = get_actual_dimensions(canvas)
 
-    # 计算适应窗口的缩放比例
     scale_width = (canvas_width - padding) / orig_width
     scale_height = (canvas_height - padding) / orig_height
-    fit_scale = min(scale_width, scale_height)  # 保持宽高比
+    fit_scale = min(scale_width, scale_height)
 
     return fit_scale

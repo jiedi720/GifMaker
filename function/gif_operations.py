@@ -21,7 +21,7 @@ def save_gif(frames, output_path, duration=100):
         raise ValueError("请先设置输出文件路径")
 
     try:
-        # 直接保存frames为GIF
+        #  framesGIF
         frames[0].save(
             output_path,
             save_all=True,
@@ -37,52 +37,69 @@ def save_gif(frames, output_path, duration=100):
 
 def create_gif(image_paths, output_path, duration=100, loop=0, resize=None, optimize=True, progress_callback=None):
     """
-    创建GIF - 使用原文件中的函数
+    将多张图片创建为GIF动画
+
+    Args:
+        image_paths: 图片路径列表
+        output_path: 输出GIF文件路径
+        duration: 每帧持续时间（毫秒）
+        loop: 循环次数（0表示无限循环）
+        resize: 调整尺寸，格式为 (width, height) 或 None
+        optimize: 是否优化GIF
+        progress_callback: 进度回调函数，接受当前进度百分比作为参数
     """
-    from .image_utils import load_image, resize_image
-
     if not image_paths:
-        raise ValueError("图片路径列表不能为空")
+        raise ValueError("至少需要一张图片")
 
-    if not output_path:
-        raise ValueError("输出路径不能为空")
+    # 确保输出目录存在
+    output_dir = os.path.dirname(os.path.abspath(output_path))
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
-    # 加载所有图片
-    frames = []
-    for img_path in image_paths:
-        img = load_image(img_path)
-        if img is None:
-            print(f"警告: 无法加载图片 {img_path}")
+    # 加载和处理所有图片
+    images = []
+    total_images = len(image_paths)
+    
+    for i, img_path in enumerate(image_paths):
+        try:
+            img = Image.open(img_path)
+            if resize:
+                img = img.resize(resize, Image.Resampling.LANCZOS)
+            # 转换为调色板模式以优化GIF
+            if img.mode != 'P':
+                img = img.convert('P', palette=Image.Palette.ADAPTIVE)
+            images.append(img)
+            
+            # 调用进度回调
+            if progress_callback:
+                progress = int((i + 1) / total_images * 80)  # 加载图片占80%
+                progress_callback(progress)
+                
+        except Exception as e:
+            print(f"警告: 无法加载图片 {img_path}: {e}")
+            if progress_callback:
+                progress = int((i + 1) / total_images * 80)
+                progress_callback(progress)
             continue
 
-        # 如果需要调整尺寸
-        if resize:
-            img = resize_image(img, resize[0], resize[1])
-
-        # 确保所有图片使用相同的模式
-        if img.mode != 'P':
-            img = img.convert('P')
-
-        frames.append(img)
-
-    if not frames:
+    if not images:
         raise ValueError("没有成功加载任何图片")
 
-    # 保存GIF
-    frames[0].save(
+    # 保存为GIF
+    images[0].save(
         output_path,
         save_all=True,
-        append_images=frames[1:],
+        append_images=images[1:],
         duration=duration,
         loop=loop,
         optimize=optimize
     )
-
-    # 调用进度回调（如果提供）
+    
+    # 完成
     if progress_callback:
-        progress_callback(100)  # 完成100%
-
-    return True
+        progress_callback(100)
+        
+    print(f"GIF已成功创建: {output_path}")
 
 
 def create_gif_from_gui(main_window_instance):
@@ -93,7 +110,6 @@ def create_gif_from_gui(main_window_instance):
     from tkinter import messagebox
     from .file_manager import validate_gif_params
 
-    # 委托给业务逻辑模块验证参数
     is_valid, error_msg = validate_gif_params(
         main_window_instance.image_paths,
         main_window_instance.output_path.get(),
@@ -104,7 +120,6 @@ def create_gif_from_gui(main_window_instance):
         messagebox.showerror("错误", error_msg)
         return
 
-    # 处理尺寸调整参数
     resize = None
     if main_window_instance.resize_width.get() and main_window_instance.resize_height.get():
         try:
@@ -112,10 +127,9 @@ def create_gif_from_gui(main_window_instance):
             height = int(main_window_instance.resize_height.get())
             resize = (width, height)
         except ValueError:
-            # 这种情况不应该发生，因为validate_gif_params已经验证
             pass
 
-    # 委托给业务逻辑模块创建GIF
+    #  GIF
     try:
         create_gif(
             image_paths=main_window_instance.image_paths,

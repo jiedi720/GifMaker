@@ -34,7 +34,6 @@ class CropRatioHandler:
             self.ratio_value = None
             return False, None, (x1, y1, x2, y2)
         elif ratio_type == "lock_current":
-            # 锁定当前选框的比例
             width = abs(x2 - x1)
             height = abs(y2 - y1)
 
@@ -81,10 +80,9 @@ class CropRatioHandler:
         if width == 0 or height == 0:
             return (x1, y1, x2, y2)
 
-        # 根据宽度计算新的高度
         new_height = int(width / ratio)
 
-        # 更新Y坐标
+        #  Y
         if y2 > y1:
             new_y2 = y1 + new_height
         else:
@@ -111,24 +109,23 @@ class CropRatioHandler:
         if width == 0 or height == 0:
             return (x1, y1, x2, y2)
 
-        # 根据拖拽的句柄类型调整尺寸
         if drag_handle in ['nw', 'ne', 'sw', 'se']:
-            # 角句柄：根据宽度调整高度
+
             new_height = int(width / self.ratio_value)
             if drag_handle in ['nw', 'sw']:
                 y1 = y2 - new_height
             else:
                 y2 = y1 + new_height
         elif drag_handle in ['n', 's']:
-            # 上下边句柄：根据高度调整宽度
+
             new_width = int(height * self.ratio_value)
             x2 = x1 + new_width
         elif drag_handle in ['e', 'w']:
-            # 左右边句柄：根据宽度调整高度
+
             new_height = int(width / self.ratio_value)
             y2 = y1 + new_height
 
-        # 确保选框有效（宽度、高度至少为1）
+        #  （、1）
         if abs(x2 - x1) < 1:
             if drag_handle in ['nw', 'w', 'sw']:
                 x1 = x2 - 1
@@ -168,30 +165,27 @@ class CropRatioHandler:
             return
 
         try:
-            # 强制更新 UI 以确保 Canvas 尺寸正确
+            #   UI  Canvas 
             dialog_instance.dialog.update_idletasks()
             dialog_instance.canvas.update_idletasks()
 
-            # 获取图片的原始尺寸
             orig_width, orig_height = dialog_instance.original_image.size
 
-            # 获取Canvas的实际尺寸
-            canvas_width = dialog_instance.canvas.winfo_width() - 20  # 减去padding
-            canvas_height = dialog_instance.canvas.winfo_height() - 20  # 减去padding
+            #  Canvas
+            canvas_width = dialog_instance.canvas.winfo_width() - 20  #  padding
+            canvas_height = dialog_instance.canvas.winfo_height() - 20  #  padding
 
-            # 确保Canvas有合理的尺寸
+            #  Canvas
             if canvas_width < 100:
                 canvas_width = orig_width
             if canvas_height < 100:
                 canvas_height = orig_height
 
-            # 计算适应窗口的缩放比例 - 委托给业务逻辑模块
-            # 使用本地函数
+
             scaled_width, scaled_height, fit_scale = calculate_scaled_dimensions(
                 orig_width, orig_height, canvas_width, canvas_height, padding=20
             )
 
-            # 更新缩放比例
             dialog_instance.preview_scale = fit_scale
             dialog_instance.display_image()
 
@@ -206,19 +200,16 @@ class CropRatioHandler:
             x2 = int(x2_var.get())
             y2 = int(y2_var.get())
 
-            # 使用比例处理器调整坐标 - 委托给业务逻辑模块
-            # 使用本地函数
+
             new_x1, new_y1, new_x2, new_y2 = apply_aspect_ratio_constraints(
                 x1, y1, x2, y2, ratio_handler.ratio_value, "lock_current"
             )
 
-            # 更新坐标
             x1_var.set(str(new_x1))
             y1_var.set(str(new_y1))
             x2_var.set(str(new_x2))
             y2_var.set(str(new_y2))
 
-            # 重绘选框
             draw_selection_box_func()
             update_size_label_func()
 
@@ -235,17 +226,16 @@ class CropRatioHandler:
             x2 = int(x2_var.get())
             y2 = int(y2_var.get())
 
-            # 使用比例处理器处理比例锁定
             is_locked, ratio_value, new_coords = ratio_handler.lock_ratio(ratio, x1, y1, x2, y2)
 
-            # 更新UI显示
+            #  UI
             if locked_ratio_label:
                 if ratio_value is not None:
                     locked_ratio_label.config(text=f"({ratio_value:.3f})")
                 else:
                     locked_ratio_label.config(text="")
 
-            # 如果锁定了比例，调整当前选框以符合比例
+
             if is_locked and ratio_value and ratio != "lock_current":
                 x1, y1, x2, y2 = new_coords
                 x1_var.set(str(x1))
@@ -263,35 +253,33 @@ class CropRatioHandler:
 
     def update_size_label(self, x1_var, y1_var, x2_var, y2_var, size_label):
         """更新实时尺寸显示"""
-        # 调用UI操作模块中的函数
+        #  UI
         from .ui_operations import update_size_label as ops_update_size_label
         ops_update_size_label(x1_var, y1_var, x2_var, y2_var, size_label)
 
     def display_reference_image(self, dialog_instance, image_path):
         """显示参考图片（上一帧/下一帧/第一帧）"""
         try:
-            # 使用 image_utils 模块加载图片
+            #   image_utils 
             from .image_utils import load_image, resize_image, create_photo_image
             ref_img = load_image(image_path)
             if not ref_img:
                 print(f"无法加载参考图片: {image_path}")
                 return
 
-            # 调整参考图片尺寸与当前图片一致
             if ref_img.size != dialog_instance.original_image.size:
                 ref_img = resize_image(ref_img, dialog_instance.original_image.width, dialog_instance.original_image.height)
 
-            # 转换为PhotoImage
+            #  PhotoImage
             scaled_width = int(dialog_instance.original_image.width * dialog_instance.preview_scale)
             scaled_height = int(dialog_instance.original_image.height * dialog_instance.preview_scale)
             ref_resized = resize_image(ref_img, scaled_width, scaled_height)
             ref_photo = create_photo_image(ref_resized)
 
-            # 清除Canvas并显示参考图片
+            #  Canvas
             dialog_instance.canvas.delete("all")
             dialog_instance.canvas.create_image(dialog_instance.image_x, dialog_instance.image_y, image=ref_photo, anchor="center")
 
-            # 保存引用防止被垃圾回收
             dialog_instance.current_photo = ref_photo
 
         except Exception as e:
@@ -299,19 +287,19 @@ class CropRatioHandler:
 
     def on_mousewheel(self, event, zoom_in_func, zoom_out_func):
         """处理鼠标滚轮事件"""
-        # 检查是否按下了 Ctrl 键
-        ctrl_pressed = event.state & 0x4  # Ctrl 键的位掩码
+        #   Ctrl 
+        ctrl_pressed = event.state & 0x4  #  Ctrl 
         if ctrl_pressed:
-            # Ctrl+滚轮：缩放图片
+            #  Ctrl+：
             if event.delta > 0 or event.num == 4:
-                # 向上滚动：放大
+
                 zoom_in_func()
             elif event.delta < 0 or event.num == 5:
-                # 向下滚动：缩小
+
                 zoom_out_func()
         else:
-            # 普通滚轮：滚动查看
-            # 检查滚动区域是否大于Canvas可视区域
+
+            #  Canvas
             scrollregion = event.widget.cget("scrollregion")
             if scrollregion:
                 parts = scrollregion.split()
@@ -321,14 +309,11 @@ class CropRatioHandler:
                     canvas_width = event.widget.winfo_width()
                     canvas_height = event.widget.winfo_height()
 
-                    # 如果图片的宽度或高度大于Canvas的可视区域，则允许滚动
+                    #  Canvas，
                     if scroll_width > canvas_width or scroll_height > canvas_height:
-                        # 检查操作系统类型来确定滚动方向
                         if event.num == 4 or event.delta > 0:
-                            # 向上滚动
                             event.widget.yview_scroll(-1, "units")
                         elif event.num == 5 or event.delta < 0:
-                            # 向下滚动
                             event.widget.yview_scroll(1, "units")
 
 
@@ -336,11 +321,10 @@ class CropState:
     """裁剪状态管理器"""
 
     def __init__(self, max_history=100):
-        # 保存裁剪结果的字典 {图片路径: 裁剪后的PIL.Image对象}
+        #   {: PIL.Image}
         self.crop_results = {}
-        # 保存裁剪坐标的字典 {图片路径: 裁剪坐标 (x1, y1, x2, y2)}
+        #   {:  (x1, y1, x2, y2)}
         self.crop_coords = {}
-        # 初始化历史管理器
         self.history_manager = HistoryManager(max_history=max_history)
 
     def save_crop_state(self):
@@ -350,11 +334,10 @@ class CropState:
             'crop_coords': {}
         }
 
-        # 保存裁剪结果
         for img_path, cropped_img in self.crop_results.items():
-            # 只保存坐标信息，不保存图片对象（避免内存问题）
+
             if img_path in self.crop_coords:
-                state['crop_results'][img_path] = True  # 标记为已裁剪
+                state['crop_results'][img_path] = True
                 state['crop_coords'][img_path] = self.crop_coords[img_path]
 
         self.history_manager.save_state(state)
@@ -364,20 +347,16 @@ class CropState:
         if not self.history_manager.can_undo():
             return False
 
-        # 获取当前状态
         current_state = {
             'crop_results': {path: True for path in self.crop_results.keys()},
             'crop_coords': self.crop_coords.copy()
         }
 
-        # 执行撤销
         previous_state = self.history_manager.undo(current_state)
         if previous_state:
-            # 恢复到上一个状态
             self.crop_results.clear()
             self.crop_coords.clear()
 
-            # 恢复裁剪结果
             for img_path, coords in previous_state['crop_coords'].items():
                 self.crop_coords[img_path] = coords
 
@@ -389,20 +368,16 @@ class CropState:
         if not self.history_manager.can_redo():
             return False
 
-        # 获取当前状态
         current_state = {
             'crop_results': {path: True for path in self.crop_results.keys()},
             'crop_coords': self.crop_coords.copy()
         }
 
-        # 执行重做
         next_state = self.history_manager.redo(current_state)
         if next_state:
-            # 恢复到下一个状态
             self.crop_results.clear()
             self.crop_coords.clear()
 
-            # 恢复裁剪结果
             for img_path, coords in next_state['crop_coords'].items():
                 self.crop_coords[img_path] = coords
 
@@ -456,10 +431,8 @@ def calculate_scaled_dimensions(orig_width, orig_height, canvas_width, canvas_he
     """计算适应画布的缩放尺寸"""
     from .image_utils import calculate_scale_to_fit
 
-    # 获取适应画布的缩放比例
     scale = calculate_scale_to_fit(orig_width, orig_height, canvas_width - padding, canvas_height - padding)
 
-    # 计算缩放后的尺寸
     scaled_width = int(orig_width * scale)
     scaled_height = int(orig_height * scale)
 
@@ -468,11 +441,10 @@ def calculate_scaled_dimensions(orig_width, orig_height, canvas_width, canvas_he
 
 def convert_canvas_to_image_coords(canvas_x, canvas_y, image_x, image_y, preview_scale, image_width, image_height):
     """将画布坐标转换为图片坐标"""
-    # 计算图片在Canvas中的实际位置
+    #  Canvas
     img_left = image_x - image_width // 2
     img_top = image_y - image_height // 2
 
-    # 转换为原始图片坐标
     orig_x = int((canvas_x - img_left) / preview_scale)
     orig_y = int((canvas_y - img_top) / preview_scale)
 
@@ -481,19 +453,17 @@ def convert_canvas_to_image_coords(canvas_x, canvas_y, image_x, image_y, preview
 
 def validate_crop_coordinates(x1, y1, x2, y2, img_width, img_height):
     """验证裁剪坐标是否有效"""
-    # 确保坐标在图片范围内
     x1 = max(0, min(x1, img_width))
     y1 = max(0, min(y1, img_height))
     x2 = max(0, min(x2, img_width))
     y2 = max(0, min(y2, img_height))
 
-    # 确保坐标顺序正确
     if x1 > x2:
         x1, x2 = x2, x1
     if y1 > y2:
         y1, y2 = y2, y1
 
-    # 确保选框有效（宽度、高度至少为1）
+    #  （、1）
     if x2 - x1 < 1:
         x2 = x1 + 1
     if y2 - y1 < 1:
@@ -521,24 +491,22 @@ def apply_aspect_ratio_constraints(x1, y1, x2, y2, aspect_ratio, constraint_type
     if width == 0 or height == 0:
         return x1, y1, x2, y2
 
-    # 根据宽高比调整尺寸
     if constraint_type in ['nw', 'ne', 'sw', 'se']:
-        # 角点：根据宽度调整高度
+
         new_height = int(width / aspect_ratio)
         if constraint_type in ['nw', 'sw']:
             y1 = y2 - new_height
         else:
             y2 = y1 + new_height
     elif constraint_type in ['n', 's']:
-        # 上下边：根据高度调整宽度
+
         new_width = int(height * aspect_ratio)
         x2 = x1 + new_width
     elif constraint_type in ['e', 'w']:
-        # 左右边：根据宽度调整高度
+
         new_height = int(width / aspect_ratio)
         y2 = y1 + new_height
 
-    # 确保选框有效
     if abs(x2 - x1) < 1:
         if constraint_type in ['nw', 'w', 'sw']:
             x1 = x2 - 1
@@ -570,7 +538,7 @@ def determine_crop_strategy(image_paths: List[str], current_index: int) -> Tuple
     current_image_path = ''
 
     if len(image_paths) > 1:
-        # 多张图片的情况，需要找到尺寸最小的作为基准
+
         min_size = float('inf')
         min_path = image_paths[0]
         min_index = 0
@@ -592,11 +560,11 @@ def determine_crop_strategy(image_paths: List[str], current_index: int) -> Tuple
         current_image_path = min_path
         current_index = min_index
 
-        # 如果传入的当前图片路径不是最小尺寸的图片，则使用最小尺寸的图片作为基准
+
         if image_paths[current_index] != min_path:
             is_base_image = True
     else:
-        # 只有一张图片，直接使用
+
         current_image_path = image_paths[current_index] if 0 <= current_index < len(image_paths) else image_paths[0] if image_paths else ''
 
     return is_base_image, current_image_path, current_index

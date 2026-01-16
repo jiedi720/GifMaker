@@ -41,7 +41,6 @@ def resize_image(image, width, height, resample=None):
         调整大小后的PIL.Image对象
     """
     if resample is None:
-        # 根据缩放方向选择合适的插值算法
         scale = (width * height) / (image.width * image.height)
         resample = Image.Resampling.LANCZOS if scale >= 1.0 else Image.Resampling.BILINEAR
 
@@ -123,10 +122,138 @@ def crop_image(image, x1, y1, x2, y2):
     Returns:
         裁剪后的PIL.Image对象
     """
-    # 确保坐标有效
+    # 确保坐标在图片范围内
     x1 = max(0, min(x1, image.width))
     y1 = max(0, min(y1, image.height))
     x2 = max(x1, min(x2, image.width))
     y2 = max(y1, min(y2, image.height))
 
     return image.crop((x1, y1, x2, y2))
+
+
+def get_image_info(image_path):
+    """
+    获取图片信息
+
+    Args:
+        image_path: 图片文件路径
+
+    Returns:
+        包含图片信息的字典，格式为:
+        {
+            'width': 宽度,
+            'height': 高度,
+            'size_kb': 文件大小(KB),
+            'format': 图片格式,
+            'mode': 图片模式
+        }
+        如果加载失败返回None
+    """
+    try:
+        if not os.path.exists(image_path):
+            return None
+
+        img = Image.open(image_path)
+        file_size = os.path.getsize(image_path) / 1024  # 转换为KB
+
+        return {
+            'width': img.width,
+            'height': img.height,
+            'size_kb': file_size,
+            'format': img.format,
+            'mode': img.mode
+        }
+    except Exception as e:
+        print(f"无法获取图片信息 {image_path}: {e}")
+        return None
+
+
+def calculate_grid_layout(num_images, canvas_width, canvas_height, preview_scale=1.0, thumbnail_size=(200, 150)):
+    """
+    计算网格布局，返回每张图片的位置和大小
+
+    Args:
+        num_images: 图片数量
+        canvas_width: Canvas宽度
+        canvas_height: Canvas高度
+        preview_scale: 预览缩放比例
+        thumbnail_size: 缩略图大小 (width, height)
+
+    Returns:
+        包含布局信息的字典列表，每个字典包含:
+        {
+            'index': 图片索引,
+            'x': x坐标,
+            'y': y坐标,
+            'width': 宽度,
+            'height': 高度,
+            'col': 列索引,
+            'row': 行索引
+        }
+    """
+    if num_images == 0:
+        return []
+
+    # 计算可用的缩略图大小
+    thumb_width = int(thumbnail_size[0] * preview_scale)
+    thumb_height = int(thumbnail_size[1] * preview_scale)
+
+    # 计算每行可以放多少张图片
+    padding = 10
+    cols = max(1, int(canvas_width / (thumb_width + padding)))
+    rows = (num_images + cols - 1) // cols
+
+    layout = []
+
+    for i in range(num_images):
+        col = i % cols
+        row = i // cols
+
+        x = padding + col * (thumb_width + padding)
+        y = padding + row * (thumb_height + padding)
+
+        layout.append({
+            'index': i,
+            'x': x,
+            'y': y,
+            'width': thumb_width,
+            'height': thumb_height,
+            'col': col,
+            'row': row
+        })
+
+    return layout
+
+
+def find_smallest_image_path(image_paths, all_image_paths):
+    """
+    在给定的图片路径列表中找到最小的图片（按尺寸）
+
+    Args:
+        image_paths: 要检查的图片路径列表
+        all_image_paths: 所有图片路径列表（用于查找索引）
+
+    Returns:
+        (最小图片路径, 在all_image_paths中的索引)
+    """
+    if not image_paths:
+        return None, -1
+
+    min_size = float('inf')
+    min_path = None
+    min_index = -1
+
+    for img_path in image_paths:
+        try:
+            img_info = get_image_info(img_path)
+            if img_info:
+                size = img_info['width'] * img_info['height']
+                if size < min_size:
+                    min_size = size
+                    min_path = img_path
+                    if img_path in all_image_paths:
+                        min_index = all_image_paths.index(img_path)
+        except Exception:
+            continue
+
+    return min_path, min_index

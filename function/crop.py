@@ -9,7 +9,6 @@ from tkinter import messagebox
 from PIL import Image
 import copy
 from .history_manager import HistoryManager
-from .image_utils import auto_crop_image
 
 
 class CropRatioHandler:
@@ -160,33 +159,7 @@ class CropRatioHandler:
 
     def auto_crop(self, original_image, x1_var, y1_var, x2_var, y2_var, draw_selection_box_func):
         """自动裁剪功能 - 自动检测图片内容并去除空白边缘"""
-        if original_image is None:
-            messagebox.showinfo("提示", "请先加载图片")
-            return
-
-        # 使用 image_utils 模块进行自动裁剪
-        crop_coords = auto_crop_image(original_image, margin=5, threshold=10)
-
-        if crop_coords is None:
-            messagebox.showerror("错误", "自动裁剪功能需要 numpy 库\n请运行: pip install numpy\n\n或者图片中未检测到有效内容区域")
-            return
-
-        try:
-            x1, y1, x2, y2 = crop_coords
-
-            # 更新输入框
-            x1_var.set(str(x1))
-            y1_var.set(str(y1))
-            x2_var.set(str(x2))
-            y2_var.set(str(y2))
-
-            # 重绘选框
-            draw_selection_box_func()
-
-            messagebox.showinfo("自动裁剪", f"已自动检测内容区域:\nX: {x1}, Y: {y1}\n宽度: {x2-x1}, 高度: {y2-y1}")
-
-        except Exception as e:
-            messagebox.showerror("错误", f"自动裁剪失败: {str(e)}")
+        messagebox.showerror("错误", "自动裁剪功能已被移除")
 
     def fit_to_window(self, dialog_instance):
         """适应窗口 - 让图片适应窗口大小"""

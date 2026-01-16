@@ -19,8 +19,7 @@ from function.image_utils import (
     create_photo_image,
     calculate_scale_to_fit,
     calculate_scale_to_fill,
-    crop_image,
-    auto_crop_image
+    crop_image
 )
 from function.crop import CropState, CropRatioHandler, find_smallest_image_path, calculate_scaled_dimensions, convert_canvas_to_image_coords, validate_crop_coordinates, calculate_aspect_ratio, apply_aspect_ratio_constraints, determine_crop_strategy
 from function.widget_utils import ensure_widget_rendered

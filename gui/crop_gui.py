@@ -771,10 +771,14 @@ class CropDialog:
                 for tag in tags:
                     if tag in self.handles and self.handles[tag] == item:
                         cursor_map = {
-                            'nw': 'size_nw_se',  #  -                            'n': 'sb_v_double_arrow',  # 
-                            'ne': 'size_ne_sw',  #  -                            'e': 'sb_h_double_arrow',  # 
-                            'se': 'size_nw_se',  #  -                            's': 'sb_v_double_arrow',  # 
-                            'sw': 'size_ne_sw',  #  -                            'w': 'sb_h_double_arrow'  # 
+                            'nw': 'size_nw_se',  # 左上角
+                            'n': 'sb_v_double_arrow',  # 上边
+                            'ne': 'size_ne_sw',  # 右上角
+                            'e': 'sb_h_double_arrow',  # 右边
+                            'se': 'size_nw_se',  # 右下角
+                            's': 'sb_v_double_arrow',  # 下边
+                            'sw': 'size_ne_sw',  # 左下角
+                            'w': 'sb_h_double_arrow'  # 左边
                         }
                         self.canvas.config(cursor=cursor_map.get(tag, 'arrow'))
                         return

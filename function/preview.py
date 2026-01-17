@@ -279,7 +279,7 @@ def preview_gif(main_window_instance):
 
                 # 转换为调色板模式以优化GIF
                 if img.mode != 'P':
-                    img = img.convert('P', palette=Image.Palette.ADAPTIVE)
+                    img = img.convert('P', palette=Image.ADAPTIVE)
 
                 frames.append(img)
             except Exception as e:

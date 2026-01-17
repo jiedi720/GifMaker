@@ -47,6 +47,11 @@ class GifMakerGUI:
         # 初始化变量
         self.image_paths = []  # 存储所有图片路径
         self.output_path = tk.StringVar()  # 输出文件路径
+        # 设置默认输出文件名
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_filename = f"animation_{timestamp}.gif"
+        self.output_path.set(default_filename)
         self.duration = tk.IntVar(value=100)  # GIF每帧持续时间，默认100ms
         self.loop = tk.IntVar(value=0)  # 循环次数，0表示无限循环
         self.optimize = tk.BooleanVar(value=True)  # 是否优化GIF
@@ -246,12 +251,12 @@ class GifMakerGUI:
         ttk.Separator(image_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=5)
 
         # 撤销按钮
-        btn_undo = ttk.Button(image_frame, text="↩️", command=lambda: self.perform_undo(), width=5)
+        btn_undo = ttk.Button(image_frame, text="↶", command=lambda: self.perform_undo(), width=5)
         btn_undo.pack(side=tk.LEFT, padx=(0, 5))
         self.create_tooltip(btn_undo, "撤销 (Ctrl+Z)")
 
         # 重做按钮
-        btn_redo = ttk.Button(image_frame, text="↪️", command=lambda: self.perform_redo(), width=5)
+        btn_redo = ttk.Button(image_frame, text="↷", command=lambda: self.perform_redo(), width=5)
         btn_redo.pack(side=tk.LEFT, padx=(0, 5))
         self.create_tooltip(btn_redo, "重做 (Ctrl+Y)")
 
@@ -494,24 +499,27 @@ class GifMakerGUI:
         except Exception as e:
             messagebox.showerror("错误", f"无法预览图片: {str(e)}")
 
-    def display_grid_preview(self):
+    def display_grid_preview(self, update_combobox=True):
         """
         以网格方式显示所有图片，从上到下，从左到右排列，根据图片尺寸调节每列的图片数
+        
+        Args:
+            update_combobox: 是否更新下拉框的值（默认为True）
         """
         # 清空Canvas和缓存
         self.preview_canvas.delete("all")
         self.image_rects.clear()
         self.preview_photos.clear()  # 清空PhotoImage列表
 
-        # 更新文件列表下拉框
-        if self.image_paths:
+        # 更新文件列表下拉框（仅在需要时更新）
+        if update_combobox and self.image_paths:
             file_names = [os.path.basename(p) for p in self.image_paths]
             self.file_combobox['values'] = file_names
             if self.selected_image_index >= 0 and self.selected_image_index < len(file_names):
                 self.file_combobox.current(self.selected_image_index)
             elif len(file_names) > 0:
                 self.file_combobox.current(0)
-        else:
+        elif update_combobox:
             self.file_combobox['values'] = []
             self.file_combobox.set('')
 
@@ -735,9 +743,12 @@ class GifMakerGUI:
                         self.selected_image_indices.add(i)
                     self.last_selected_index = i
                 else:
-                    # 普通点击：清除多选，只选中当前图片
-                    self.selected_image_indices = {i}
-                    self.last_selected_index = i
+                    # 普通点击：检查点击的图片是否已经在选中集合中
+                    if i not in self.selected_image_indices:
+                        # 如果点击的是未选中的图片，才切换到单选
+                        self.selected_image_indices = {i}
+                        self.last_selected_index = i
+                    # 如果点击的是已选中的图片，则保持当前选择不变（用于拖拽）
 
                 self.selected_image_index = i
                 self.file_combobox.current(i)
@@ -770,47 +781,64 @@ class GifMakerGUI:
             # 获取文件名
             filename = os.path.basename(self.image_paths[image_index])
 
-            # 设置图标尺寸和字体
-            icon_size = 40
-            font_size = 10
-
-            # 创建图标背景
-            self.preview_canvas.create_rectangle(
-                x - icon_size // 2, y - icon_size // 2,
-                x + icon_size // 2, y + icon_size // 2,
-                fill="#E0E0E0",
-                outline="#666666",
-                width=2,
-                tags="drag_preview"
-            )
-
-            # 根据文件扩展名显示图标文字
-            ext = os.path.splitext(filename)[1].upper()
-            if ext in ['.JPG', '.JPEG', '.PNG', '.GIF', '.BMP']:
-                icon_text = "IMG"
+            # 根据选中的图片数量选择图标
+            if len(self.selected_image_indices) > 1:
+                # 多张图片：使用 photos.png
+                icon_path = os.path.join(os.path.dirname(__file__), '..', 'icons', 'photos.png')
             else:
-                icon_text = "📄"
+                # 单张图片：使用 photo.png
+                icon_path = os.path.join(os.path.dirname(__file__), '..', 'icons', 'photo.png')
 
-            self.preview_canvas.create_text(
-                x, y - 5,
-                text=icon_text,
-                font=("Arial", 16),
-                tags="drag_preview"
-            )
+            if os.path.exists(icon_path):
+                icon_img = Image.open(icon_path)
+                # 缩放图标
+                icon_size = 40
+                icon_resized = icon_img.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
+                self.drag_preview_photo = ImageTk.PhotoImage(icon_resized)
+                
+                # 显示图标
+                self.preview_canvas.create_image(
+                    x, y,
+                    image=self.drag_preview_photo,
+                    anchor=tk.CENTER,
+                    tags="drag_preview"
+                )
+            else:
+                # 如果图标不存在，使用原来的文字显示
+                icon_size = 40
+                font_size = 10
 
-            # 显示文件名（截断过长的文件名）
-            max_name_length = 10
-            display_name = filename
-            if len(display_name) > max_name_length:
-                display_name = display_name[:max_name_length - 3] + "..."
+                # 创建图标背景
+                self.preview_canvas.create_rectangle(
+                    x - icon_size // 2, y - icon_size // 2,
+                    x + icon_size // 2, y + icon_size // 2,
+                    fill="#E0E0E0",
+                    outline="#666666",
+                    width=2,
+                    tags="drag_preview"
+                )
 
-            self.preview_canvas.create_text(
-                x, y + 15,
-                text=display_name,
-                font=("Arial", font_size),
-                fill="#333333",
-                tags="drag_preview"
-            )
+                # 显示图标文字
+                self.preview_canvas.create_text(
+                    x, y - 5,
+                    text="IMG",
+                    font=("Arial", 16),
+                    tags="drag_preview"
+                )
+
+                # 显示文件名（截断过长的文件名）
+                max_name_length = 10
+                display_name = filename
+                if len(display_name) > max_name_length:
+                    display_name = display_name[:max_name_length - 3] + "..."
+
+                self.preview_canvas.create_text(
+                    x, y + 15,
+                    text=display_name,
+                    font=("Arial", font_size),
+                    fill="#333333",
+                    tags="drag_preview"
+                )
 
             # 将拖拽预览置于顶层
             self.preview_canvas.tag_raise("drag_preview")
@@ -980,18 +1008,61 @@ class GifMakerGUI:
                 from function.history_manager import save_state
                 save_state(self)
 
-                # 调整插入索引（因为删除源图片后索引会变化）
-                if self.insert_index > self.drag_source_index:
-                    adjusted_insert_index = self.insert_index - 1
-                else:
+                # 检查是否是多选拖拽
+                if len(self.selected_image_indices) > 1:
+                    # 多选拖拽：移动所有选中的图片
+                    # 1. 获取所有选中的索引，按升序排序
+                    sorted_selected_indices = sorted(self.selected_image_indices)
+                    
+                    # 2. 计算插入位置的调整值
+                    # 如果插入位置在源索引之后，需要减去已移除的图片数量
+                    remove_count = 0
                     adjusted_insert_index = self.insert_index
+                    
+                    # 3. 收集所有要移动的图片路径
+                    images_to_move = []
+                    for idx in sorted_selected_indices:
+                        if idx < self.insert_index:
+                            remove_count += 1
+                        images_to_move.append(self.image_paths[idx])
+                    
+                    # 4. 从原位置移除图片（从后往前移除，避免索引混乱）
+                    for idx in reversed(sorted_selected_indices):
+                        self.image_paths.pop(idx)
+                    
+                    # 5. 调整插入索引
+                    if self.insert_index > sorted_selected_indices[-1]:
+                        adjusted_insert_index = self.insert_index - len(sorted_selected_indices)
+                    elif self.insert_index > sorted_selected_indices[0]:
+                        adjusted_insert_index = self.insert_index - sum(1 for idx in sorted_selected_indices if idx < self.insert_index)
+                    
+                    # 6. 插入图片到新位置
+                    for i, img_path in enumerate(images_to_move):
+                        self.image_paths.insert(adjusted_insert_index + i, img_path)
+                    
+                    # 7. 更新选中索引
+                    new_selected_indices = set(range(adjusted_insert_index, adjusted_insert_index + len(images_to_move)))
+                    self.selected_image_indices = new_selected_indices
+                    # 选中第一个移动的图片作为当前选中索引
+                    self.selected_image_index = adjusted_insert_index
+                else:
+                    # 单选拖拽：移动单个图片
+                    # 调整插入索引（因为删除源图片后索引会变化）
+                    if self.insert_index > self.drag_source_index:
+                        adjusted_insert_index = self.insert_index - 1
+                    else:
+                        adjusted_insert_index = self.insert_index
 
-                # 执行移动操作
-                source_path = self.image_paths.pop(self.drag_source_index)
-                self.image_paths.insert(adjusted_insert_index, source_path)
+                    # 执行移动操作
+                    source_path = self.image_paths.pop(self.drag_source_index)
+                    self.image_paths.insert(adjusted_insert_index, source_path)
 
-                # 更新UI
-                self.display_grid_preview()
+                    # 更新选中索引
+                    self.selected_image_index = adjusted_insert_index
+                    self.selected_image_indices = {adjusted_insert_index}
+
+                # 更新UI（不重新绘制整个网格，只更新必要部分）
+                self.update_image_positions()
 
         except Exception as e:
             print(f"释放失败: {e}")
@@ -1005,6 +1076,122 @@ class GifMakerGUI:
             self.drag_preview_image = None
             self.drag_preview_photo = None
             self.insert_index = -1
+
+    def update_image_positions(self):
+        """更新图片位置（使用双缓冲技术减少闪烁）"""
+        from function.image_utils import calculate_grid_layout
+        
+        # 获取Canvas实际尺寸
+        self.preview_canvas.update_idletasks()
+        canvas_width = self.preview_canvas.winfo_width()
+        canvas_height = self.preview_canvas.winfo_height()
+
+        # 计算布局，使用实际的Canvas尺寸
+        layout_data = calculate_grid_layout(
+            self.image_paths,
+            self.pending_crops,
+            self.preview_scale,
+            canvas_width=canvas_width,
+            canvas_height=canvas_height
+        )
+
+        if not layout_data:
+            return
+
+        # 清空缓存
+        self.image_rects.clear()
+        self.preview_photos.clear()
+
+        # 准备新的图片数据
+        new_photos = []
+        new_rects = []
+
+        # 遍历布局数据，准备每张图片
+        for item in layout_data:
+            img_path = item['path']
+            x, y = item['position']
+            size = item['size']
+
+            # 如果图片已裁剪，使用裁剪后的图片
+            if img_path in self.pending_crops:
+                img = self.pending_crops[img_path]
+            else:
+                img = load_image(img_path)
+
+            if img:
+                # 调整图片大小
+                img_resized = resize_image(img, size[0], size[1])
+                photo = create_photo_image(img_resized)
+                new_photos.append(photo)
+                new_rects.append({
+                    'x1': x,
+                    'y1': y,
+                    'x2': x + size[0],
+                    'y2': y + size[1]
+                })
+
+        # 一次性更新所有内容（减少闪烁）
+        # 1. 清空画布
+        self.preview_canvas.delete("all")
+        
+        # 2. 一次性绘制所有图片
+        for i, (photo, item) in enumerate(zip(new_photos, layout_data)):
+            x, y = item['position']
+            size = item['size']
+            img_path = item['path']
+            
+            # 绘制图片
+            self.preview_canvas.create_image(x, y, image=photo, anchor=tk.NW, tags=f"image_{item['index']}")
+            
+            # 为所有图片添加细边框
+            self.preview_canvas.create_rectangle(
+                x, y, x + size[0], y + size[1],
+                outline="#CCCCCC",
+                width=1,
+                tags=f"border_{item['index']}"
+            )
+            
+            # 显示图片序号
+            self.preview_canvas.create_text(
+                x + 5, y + 5,
+                text=f"#{item['index'] + 1}",
+                fill="white",
+                font=("Arial", 10, "bold"),
+                anchor=tk.NW,
+                tags=f"label_{item['index']}"
+            )
+            
+            # 显示文件名（截断过长的文件名）
+            filename = os.path.splitext(os.path.basename(img_path))[0]
+            max_filename_length = max(5, size[0] // 8)
+            if len(filename) > max_filename_length:
+                filename = filename[:max_filename_length - 3] + "..."
+            
+            font_size = max(7, min(10, size[1] // 15))
+            
+            self.preview_canvas.create_text(
+                x + size[0] - 5, y + 5,
+                text=filename,
+                fill="white",
+                font=("Arial", font_size),
+                anchor=tk.NE,
+                tags=f"filename_{item['index']}"
+            )
+
+        # 3. 保存新的缓存数据
+        self.preview_photos = new_photos
+        self.image_rects = new_rects
+
+        # 4. 重新绘制选中框
+        if self.selected_image_indices:
+            self.draw_selection_boxes()
+
+        # 5. 更新滚动区域
+        max_x = max(rect['x2'] for rect in self.image_rects) if self.image_rects else 0
+        max_y = max(rect['y2'] for rect in self.image_rects) if self.image_rects else 0
+        self.preview_canvas.configure(scrollregion=(0, 0, max_x + 20, max_y + 20))
+        if self.selected_image_index >= 0 and self.selected_image_index < len(self.image_rects):
+            self.scroll_to_image(self.selected_image_index)
 
     def on_preview_right_click(self, event):
         """处理预览区域右键点击事件"""
@@ -1140,10 +1327,6 @@ class GifMakerGUI:
                         image_paths.append(path)
 
             if image_paths:
-                # 保存当前状态到历史记录
-                from function.history_manager import save_state
-                save_state(self)
-
                 # 清除已有图片，只保留新拖拽的图片
                 self.image_paths = image_paths
 

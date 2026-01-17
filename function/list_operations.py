@@ -217,8 +217,8 @@ def delete_images(main_window_instance, index):
             elif main_window_instance.selected_image_index > index:
                 main_window_instance.selected_image_index -= 1
 
-            # 更新图片列表显示
-            main_window_instance.display_grid_preview()
+            # 更新图片列表显示（使用update_image_positions避免闪烁）
+            main_window_instance.update_image_positions()
             print(f"已删除图片 # {index + 1}")
 
         except Exception as e:

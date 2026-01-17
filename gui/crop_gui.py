@@ -53,6 +53,10 @@ class CropDialog:
         self.move_start_pos = None
         self.move_start_coords = None
 
+        # 跟踪当前显示的图片类型：'original', 'prev', 'next', 'first'
+        self.current_display_mode = 'original'
+        self.current_reference_path = None  # 当前显示的参考图片路径
+
 
         self.image_x = 0
         self.image_y = 0
@@ -109,6 +113,10 @@ class CropDialog:
             return
 
         try:
+            # 重置为显示原始图片
+            self.current_display_mode = 'original'
+            self.current_reference_path = None
+
             img = self.original_image
             orig_width, orig_height = img.size
 
@@ -167,20 +175,34 @@ class CropDialog:
             self.image_width = scaled_width
             self.image_height = scaled_height
 
+            # 绘制图片
             self.canvas.create_image(self.image_x, self.image_y, image=self.current_photo, anchor=anchor)
+
+            # 绘制图片边框
+            if anchor == tk.NW:
+                # 左上角对齐
+                border_x1 = self.image_x - 1
+                border_y1 = self.image_y - 1
+                border_x2 = self.image_x + scaled_width + 1
+                border_y2 = self.image_y + scaled_height + 1
+            else:
+                # 居中对齐
+                border_x1 = self.image_x - scaled_width // 2 - 1
+                border_y1 = self.image_y - scaled_height // 2 - 1
+                border_x2 = self.image_x + scaled_width // 2 + 1
+                border_y2 = self.image_y + scaled_height // 2 + 1
+
+            self.canvas.create_rectangle(
+                border_x1, border_y1, border_x2, border_y2,
+                outline="#CCCCCC",
+                width=2,
+                tags="image_border"
+            )
 
             self.x1_var.set("0")
             self.y1_var.set("0")
             self.x2_var.set(str(orig_width))
             self.y2_var.set(str(orig_height))
-
-
-            if not hasattr(self, '_trace_ids'):
-                self._trace_ids = []
-                self._trace_ids.append(self.show_cropped_var.trace_add('write', lambda *args: self.apply_display_options()))
-                self._trace_ids.append(self.show_prev_var.trace_add('write', lambda *args: self.apply_display_options()))
-                self._trace_ids.append(self.show_next_var.trace_add('write', lambda *args: self.apply_display_options()))
-                self._trace_ids.append(self.show_first_var.trace_add('write', lambda *args: self.apply_display_options()))
 
             self.draw_selection_box()
 
@@ -272,7 +294,7 @@ class CropDialog:
             self.x2_var,
             self.y2_var,
             self.ratio_handler,
-            getattr(self, 'locked_ratio_label', None),
+            self.locked_ratio_label,
             self.draw_selection_box,
             lambda: self.ratio_handler.update_size_label(self.x1_var, self.y1_var, self.x2_var, self.y2_var, self.size_label)
         ))
@@ -281,11 +303,11 @@ class CropDialog:
             ("自由", "free"),
             ("锁定比例", "lock_current"),
             ("原始比例", "original"),
+            ("黄金分割", "1.618"),
             ("1:1", "1:1"),
             ("16:9", "16:9"),
             ("4:3", "4:3"),
-            ("3:2", "3:2"),
-            ("黄金分割", "1.618")
+            ("3:2", "3:2")
         ]
 
         #   grid ，
@@ -300,21 +322,28 @@ class CropDialog:
         option_group.pack(fill="x", pady=(0, 15), ipadx=10)
         
         option_group.columnconfigure(0, weight=0)
+        
+        # "显示裁剪后"是独立的选项
         self.show_cropped_var = tk.BooleanVar()
-        self.show_prev_var = tk.BooleanVar()
-        self.show_next_var = tk.BooleanVar()
-        self.show_first_var = tk.BooleanVar()
-
+        cb_cropped = ttk.Checkbutton(option_group, text="显示裁剪后", variable=self.show_cropped_var,
+                                   command=self.apply_display_options)
+        cb_cropped.grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        
+        ttk.Separator(option_group, orient="horizontal").grid(row=1, column=0, sticky="ew", pady=(5, 5))
+        
+        # 其他选项是互斥的
+        self.display_option_var = tk.StringVar(value="none")
+        
         opts = [
-            ("显示裁剪后", self.show_cropped_var),
-            ("显示上一帧", self.show_prev_var),
-            ("显示下一帧", self.show_next_var),
-            ("显示第一帧", self.show_first_var)
+            ("显示上一帧", "prev"),
+            ("显示下一帧", "next"),
+            ("显示第一帧", "first")
         ]
         
-        for i, (text, var) in enumerate(opts):
-            cb = ttk.Checkbutton(option_group, text=text, variable=var)
-            cb.grid(row=i, column=0, sticky="w", padx=5, pady=5)
+        for i, (text, value) in enumerate(opts):
+            rb = ttk.Radiobutton(option_group, text=text, variable=self.display_option_var, value=value,
+                                command=self.apply_display_options)
+            rb.grid(row=i + 2, column=0, sticky="w", padx=5, pady=5)
 
         # 分隔线
         ttk.Separator(self.modules_container, orient="horizontal").pack(fill="x", pady=(10, 10))
@@ -392,17 +421,6 @@ class CropDialog:
 
         widget.bind("<Enter>", enter)
         widget.bind("<Leave>", leave)
-        
-        # 确保窗口关闭时销毁tooltip
-        def on_window_close(event):
-            if hasattr(widget, '_tooltip'):
-                try:
-                    widget._tooltip.destroy()
-                except:
-                    pass
-                del widget._tooltip
-
-        self.dialog.bind("<Destroy>", on_window_close)
 
     def reset_zoom(self):
         """原始大小 - 按图片原始尺寸显示图片"""
@@ -414,7 +432,13 @@ class CropDialog:
             # 重置缩放比例为1.0（原始尺寸）
             self.preview_scale = 1.0
 
-            self.display_image()
+            # 根据当前显示的图片类型来决定如何重新显示
+            if self.current_display_mode != 'original' and self.current_reference_path:
+                # 重新应用显示选项
+                self.apply_display_options()
+            else:
+                # 显示原始图片
+                self.display_image()
 
         except Exception as e:
             messagebox.showerror("错误", f"重置缩放失败: {str(e)}")
@@ -427,7 +451,14 @@ class CropDialog:
         try:
             if self.preview_scale < 5.0:
                 self.preview_scale *= 1.25
-                self.display_image()
+
+                # 根据当前显示的图片类型来决定如何重新显示
+                if self.current_display_mode != 'original' and self.current_reference_path:
+                    # 如果当前显示的是参考图片，重新显示该参考图片
+                    self.ratio_handler.display_reference_image(self, self.current_reference_path)
+                else:
+                    # 显示原始图片
+                    self.display_image()
         except Exception as e:
             print(f"放大失败: {e}")
 
@@ -439,7 +470,14 @@ class CropDialog:
         try:
             if self.preview_scale > 0.1:
                 self.preview_scale /= 1.25
-                self.display_image()
+
+                # 根据当前显示的图片类型来决定如何重新显示
+                if self.current_display_mode != 'original' and self.current_reference_path:
+                    # 如果当前显示的是参考图片，重新显示该参考图片
+                    self.ratio_handler.display_reference_image(self, self.current_reference_path)
+                else:
+                    # 显示原始图片
+                    self.display_image()
         except Exception as e:
             print(f"缩小失败: {e}")
 
@@ -488,10 +526,8 @@ class CropDialog:
                     'is_base_image': True,
                     'crop_coords': {path: self.crop_state.get_crop_coords(path) for path in self.image_paths},
                     'options': {
-                        'cropped': self.show_cropped_var.get(),
-                        'prev': self.show_prev_var.get(),
-                        'next': self.show_next_var.get(),
-                        'first': self.show_first_var.get()
+                        'show_cropped': self.show_cropped_var.get(),
+                        'display_option': self.display_option_var.get()
                     }
                 }
             else:
@@ -503,20 +539,53 @@ class CropDialog:
                     'end': (x2, y2),
                     'crop_coords': {self.image_path: (x1, y1, x2, y2)},
                     'options': {
-                        'cropped': self.show_cropped_var.get(),
-                        'prev': self.show_prev_var.get(),
-                        'next': self.show_next_var.get(),
-                        'first': self.show_first_var.get()
+                        'show_cropped': self.show_cropped_var.get(),
+                        'display_option': self.display_option_var.get()
                     }
                 }
 
+            # 清理所有tooltip
+            self._cleanup_all_tooltips()
             self.dialog.destroy()
         except ValueError:
             messagebox.showerror("错误", "请输入有效的数字坐标")
     
     def cancel_clicked(self):
         self.result = None
+        # 清理所有tooltip
+        self._cleanup_all_tooltips()
         self.dialog.destroy()
+    
+    def _cleanup_all_tooltips(self):
+        """清理所有tooltip"""
+        # 遍历所有子控件，清理tooltip
+        for widget in self.dialog.winfo_children():
+            if hasattr(widget, '_tooltip'):
+                try:
+                    widget._tooltip.destroy()
+                except:
+                    pass
+                del widget._tooltip
+            # 递归清理子控件的tooltip
+            for child in widget.winfo_children():
+                if hasattr(child, '_tooltip'):
+                    try:
+                        child._tooltip.destroy()
+                    except:
+                        pass
+                    del child._tooltip
+
+        # 清理所有 Toplevel 窗口（除了对话框本身）
+        try:
+            all_windows = self.dialog.winfo_children()
+            for window in all_windows:
+                if isinstance(window, tk.Toplevel) and window != self.dialog:
+                    try:
+                        window.destroy()
+                    except:
+                        pass
+        except:
+            pass
         
     def show(self):
         self.dialog.wait_window()
@@ -661,41 +730,65 @@ class CropDialog:
 
             x1, y1, x2, y2 = self.drag_start_coords
 
-            if self.dragging_handle == 'nw':  # 左上角
-                x1 = max(0, x1 + img_dx)
-                y1 = max(0, y1 + img_dy)
-            elif self.dragging_handle == 'n':
-                y1 = max(0, y1 + img_dy)
-            elif self.dragging_handle == 'ne':  # 右上角
-                x2 = min(self.original_image.width, x2 + img_dx)
-                y1 = max(0, y1 + img_dy)
-            elif self.dragging_handle == 'e':
-                x2 = min(self.original_image.width, x2 + img_dx)
-            elif self.dragging_handle == 'se':  # 右下角
-                x2 = min(self.original_image.width, x2 + img_dx)
-                y2 = min(self.original_image.height, y2 + img_dy)
-            elif self.dragging_handle == 's':
-                y2 = min(self.original_image.height, y2 + img_dy)
-            elif self.dragging_handle == 'sw':  # 左下角
-                x1 = max(0, x1 + img_dx)
-                y2 = min(self.original_image.height, y2 + img_dy)
-            elif self.dragging_handle == 'w':
-                x1 = max(0, x1 + img_dx)
+            # 保存原始坐标用于比例锁定
+            orig_x1, orig_y1, orig_x2, orig_y2 = x1, y1, x2, y2
 
+            if self.dragging_handle == 'nw':  # 左上角
+                x1 = x1 + img_dx
+                y1 = y1 + img_dy
+            elif self.dragging_handle == 'n':
+                y1 = y1 + img_dy
+            elif self.dragging_handle == 'ne':  # 右上角
+                x2 = x2 + img_dx
+                y1 = y1 + img_dy
+            elif self.dragging_handle == 'e':
+                x2 = x2 + img_dx
+            elif self.dragging_handle == 'se':  # 右下角
+                x2 = x2 + img_dx
+                y2 = y2 + img_dy
+            elif self.dragging_handle == 's':
+                y2 = y2 + img_dy
+            elif self.dragging_handle == 'sw':  # 左下角
+                x1 = x1 + img_dx
+                y2 = y2 + img_dy
+            elif self.dragging_handle == 'w':
+                x1 = x1 + img_dx
+
+            # 如果启用了比例锁定，先应用比例约束
             if self.ratio_handler.is_ratio_locked and self.ratio_handler.ratio_value:
                 x1, y1, x2, y2 = self.ratio_handler.adjust_coords_by_ratio(x1, y1, x2, y2, self.dragging_handle)
+            else:
+                # 如果没有启用比例锁定，确保坐标在边界内
+                x1 = max(0, x1)
+                y1 = max(0, y1)
+                x2 = min(self.original_image.width, x2)
+                y2 = min(self.original_image.height, y2)
 
+            # 验证坐标（确保最小尺寸和正确顺序）
             from function.crop import validate_crop_coordinates
             x1, y1, x2, y2 = validate_crop_coordinates(
                 x1, y1, x2, y2, self.original_image.width, self.original_image.height
             )
+
+            # 如果启用了比例锁定，再次应用比例约束以确保比例不被破坏
+            if self.ratio_handler.is_ratio_locked and self.ratio_handler.ratio_value:
+                x1, y1, x2, y2 = self.ratio_handler.adjust_coords_by_ratio(x1, y1, x2, y2, self.dragging_handle)
 
             self.x1_var.set(str(x1))
             self.y1_var.set(str(y1))
             self.x2_var.set(str(x2))
             self.y2_var.set(str(y2))
 
-            self.draw_selection_box()
+            # 如果勾选了显示裁剪后，需要更新预览
+            show_cropped = self.show_cropped_var.get()
+            display_option = self.display_option_var.get()
+            if show_cropped or display_option != "none":
+                # 添加调试信息
+                print(f"显示裁剪后: {show_cropped}, 显示选项: {display_option}")
+                self.apply_display_options()
+            else:
+                self.draw_selection_box()
+
             from function.ui_operations import update_size_label
             update_size_label(self.x1_var, self.y1_var, self.x2_var, self.y2_var, self.size_label)
 
@@ -797,32 +890,114 @@ class CropDialog:
             if self.base_photo:
                 self.canvas.create_image(self.image_x, self.image_y, image=self.base_photo, anchor=tk.CENTER)
 
-            if self.show_cropped_var.get():
-                #   image_utils 
-                cropped_img = crop_image(self.original_image, x1, y1, x2, y2)
+            # 获取当前选择的显示选项
+            display_option = self.display_option_var.get()
+            show_cropped = self.show_cropped_var.get()
+
+            # 添加调试信息
+            print(f"apply_display_options - show_cropped: {show_cropped}, display_option: {display_option}")
+            print(f"裁剪坐标: ({x1}, {y1}, {x2}, {y2})")
+
+            self.current_display_mode = 'original'  # 重置为原始图片
+            self.current_reference_path = None
+
+            # 确定要显示的图片
+            if display_option == "prev" and self.image_paths and len(self.image_paths) > 1 and self.current_index > 0:
+                # 显示上一帧
+                prev_path = self.image_paths[self.current_index - 1]
+                self.current_display_mode = 'prev'
+                self.current_reference_path = prev_path
+                display_image_path = prev_path
+            elif display_option == "next" and self.image_paths and len(self.image_paths) > 1 and self.current_index < len(self.image_paths) - 1:
+                # 显示下一帧
+                next_path = self.image_paths[self.current_index + 1]
+                self.current_display_mode = 'next'
+                self.current_reference_path = next_path
+                display_image_path = next_path
+            elif display_option == "first" and self.image_paths and len(self.image_paths) > 1:
+                # 显示第一帧
+                first_path = self.image_paths[0]
+                self.current_display_mode = 'first'
+                self.current_reference_path = first_path
+                display_image_path = first_path
+            else:
+                # 显示原始图片
+                self.current_display_mode = 'original'
+                self.current_reference_path = None
+                display_image_path = None
+
+            # 加载要显示的图片
+            from function.image_utils import load_image, resize_image, create_photo_image
+
+            if display_image_path:
+                display_img = load_image(display_image_path)
+                if not display_img:
+                    print(f"无法加载图片: {display_image_path}")
+                    return
+
+                # 调整图片尺寸以匹配原始图片
+                if display_img.size != (orig_width, orig_height):
+                    display_img = resize_image(display_img, orig_width, orig_height)
+            else:
+                display_img = self.original_image
+
+            # 如果需要显示裁剪效果
+            if show_cropped:
+                # 添加调试信息
+                print(f"开始显示裁剪效果...")
+                print(f"原始图片尺寸: {orig_width}x{orig_height}")
+                print(f"显示图片尺寸: {display_img.size}")
+
+                # 应用裁剪
+                cropped_img = crop_image(display_img, x1, y1, x2, y2)
+                print(f"裁剪后图片尺寸: {cropped_img.size}")
+
+                # 创建一个半透明的黑色遮罩
                 mask = Image.new('RGBA', (orig_width, orig_height), (0, 0, 0, 180))
-                mask.paste(cropped_img, (x1, y1))
+                # 将裁剪后的图片粘贴到遮罩上
+                cropped_rgba = cropped_img.convert('RGBA')
+                mask.paste(cropped_rgba, (x1, y1))
+                # 转换为 RGB 以便显示
                 mask = mask.convert('RGB')
 
-                #  PhotoImage
+                # 创建PhotoImage
                 scaled_width = int(orig_width * self.preview_scale)
                 scaled_height = int(orig_height * self.preview_scale)
                 mask_resized = resize_image(mask, scaled_width, scaled_height)
                 self.current_photo = create_photo_image(mask_resized)
                 self.canvas.delete("all")
                 self.canvas.create_image(self.image_x, self.image_y, image=self.current_photo, anchor=tk.CENTER)
-
-            elif self.show_prev_var.get() and self.image_paths and self.current_index > 0:
-                prev_path = self.image_paths[self.current_index - 1]
-                self.ratio_handler.display_reference_image(self, prev_path)
-
-            elif self.show_next_var.get() and self.image_paths and self.current_index < len(self.image_paths) - 1:
-                next_path = self.image_paths[self.current_index + 1]
-                self.ratio_handler.display_reference_image(self, next_path)
-
-            elif self.show_first_var.get() and self.image_paths:
-                first_path = self.image_paths[0]
-                self.ratio_handler.display_reference_image(self, first_path)
+                # 绘制图片边框
+                border_x1 = self.image_x - scaled_width // 2 - 1
+                border_y1 = self.image_y - scaled_height // 2 - 1
+                border_x2 = self.image_x + scaled_width // 2 + 1
+                border_y2 = self.image_y + scaled_height // 2 + 1
+                self.canvas.create_rectangle(
+                    border_x1, border_y1, border_x2, border_y2,
+                    outline="#CCCCCC",
+                    width=2,
+                    tags="image_border"
+                )
+                print(f"裁剪效果显示完成")
+            else:
+                # 不显示裁剪效果，直接显示图片
+                scaled_width = int(orig_width * self.preview_scale)
+                scaled_height = int(orig_height * self.preview_scale)
+                img_resized = resize_image(display_img, scaled_width, scaled_height)
+                self.current_photo = create_photo_image(img_resized)
+                self.canvas.delete("all")
+                self.canvas.create_image(self.image_x, self.image_y, image=self.current_photo, anchor=tk.CENTER)
+                # 绘制图片边框
+                border_x1 = self.image_x - scaled_width // 2 - 1
+                border_y1 = self.image_y - scaled_height // 2 - 1
+                border_x2 = self.image_x + scaled_width // 2 + 1
+                border_y2 = self.image_y + scaled_height // 2 + 1
+                self.canvas.create_rectangle(
+                    border_x1, border_y1, border_x2, border_y2,
+                    outline="#CCCCCC",
+                    width=2,
+                    tags="image_border"
+                )
 
             self.draw_selection_box()
 
@@ -854,6 +1029,9 @@ class CropDialog:
 
             self.canvas.delete("selection_box")
             self.canvas.delete("handle")
+
+            # 确保图片边框在选框下方
+            self.canvas.tag_lower("image_border")
 
 
             self.canvas.create_rectangle(

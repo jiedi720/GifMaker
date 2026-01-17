@@ -81,10 +81,6 @@ def select_images(main_window_instance):
         ]
     )
     if files:
-        # 保存当前状态到历史记录
-        from function.history_manager import save_state as save_main_window_state
-        save_main_window_state(main_window_instance)
-
         # 清除已有图片，只保留新选择的图片
         main_window_instance.image_paths = list(files)
 
@@ -112,10 +108,6 @@ def select_directory(main_window_instance):
         image_files = get_image_files(directory)
 
         if image_files:
-            # 保存当前状态到历史记录
-            from function.history_manager import save_state as save_main_window_state
-            save_main_window_state(main_window_instance)
-
             # 清除已有图片，只保留新选择的图片
             main_window_instance.image_paths = image_files
 
@@ -135,9 +127,6 @@ def clear_images(main_window_instance):
     清空图片列表
     清除所有已选择的图片路径
     """
-    from function.history_manager import save_state as save_main_window_state
-    save_main_window_state(main_window_instance)
-
     main_window_instance.image_paths = []
     main_window_instance.selected_image_indices = set()
     main_window_instance.selected_image_index = -1

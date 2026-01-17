@@ -90,8 +90,11 @@ def on_file_selected(main_window_instance, event):
             main_window_instance.selected_image_indices = {current_selection}
             main_window_instance.last_selected_index = current_selection
 
-            # 更新预览（使用网格布局，确保缩放按钮有效）
-            main_window_instance.display_grid_preview()
+            # 只更新选中框，不重新绘制整个网格（避免闪烁）
+            main_window_instance.draw_selection_boxes()
+            
+            # 滚动到选中的图片
+            main_window_instance.scroll_to_image(current_selection)
 
             # 更新状态信息
             update_status_info(main_window_instance)
@@ -100,23 +103,32 @@ def on_file_selected(main_window_instance, event):
 
 
 def browse_output(main_window_instance):
-    """浏览输出目录"""
-    current_dir = os.path.dirname(main_window_instance.output_path.get())
+    """浏览输出文件"""
+    current_path = main_window_instance.output_path.get()
+    current_dir = os.path.dirname(current_path)
+    current_filename = os.path.basename(current_path)
+
     if not current_dir or not os.path.exists(current_dir):
         current_dir = os.getcwd()
 
-    selected_dir = filedialog.askdirectory(
-        title="选择输出目录",
-        initialdir=current_dir
+    # 生成默认文件名
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    default_filename = f"animation_{timestamp}.gif"
+
+    selected_file = filedialog.asksaveasfilename(
+        title="选择输出文件",
+        initialdir=current_dir,
+        initialfile=default_filename,
+        defaultextension=".gif",
+        filetypes=[
+            ("GIF files", "*.gif"),
+            ("All files", "*.*")
+        ]
     )
 
-    if selected_dir:
-        import datetime
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_filename = f"animation_{timestamp}.gif"
-        default_path = os.path.join(selected_dir, default_filename)
-
-        main_window_instance.output_path.set(default_path)
+    if selected_file:
+        main_window_instance.output_path.set(selected_file)
 
 
 def enter_crop_mode(main_window_instance):

@@ -301,8 +301,8 @@ def undo(main_window_instance):
             main_window_instance.pending_crops.clear()
             main_window_instance.pending_crop_coords.clear()
 
-        # 更新UI
-        main_window_instance.display_grid_preview()
+        # 更新UI（使用update_image_positions避免闪烁）
+        main_window_instance.update_image_positions()
         print("已撤销操作")
 
 
@@ -463,5 +463,5 @@ def redo(main_window_instance):
             # 清空待保存的裁剪
             main_window_instance.pending_crops.clear()
 
-        # 更新UI
-        main_window_instance.display_grid_preview()
+        # 更新UI（使用update_image_positions避免闪烁）
+        main_window_instance.update_image_positions()

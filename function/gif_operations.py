@@ -21,12 +21,30 @@ def save_gif(frames, output_path, duration=100, loop=0):
     if not output_path:
         raise ValueError("请先设置输出文件路径")
 
+    # 检查输出路径是否包含目录部分
+    output_dir = os.path.dirname(output_path)
+    if not output_dir:
+        raise ValueError("输出路径必须包含目录部分，请选择完整的文件路径")
+
+    # 确保输出目录存在
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
     try:
-        #  framesGIF
-        frames[0].save(
+        # 确保所有帧具有相同的颜色模式
+        # 转换所有帧为RGB模式，然后再保存为GIF
+        converted_frames = []
+        for frame in frames:
+            # 转换为RGB模式
+            if frame.mode != 'RGB':
+                frame = frame.convert('RGB')
+            converted_frames.append(frame)
+
+        # 保存为GIF
+        converted_frames[0].save(
             output_path,
             save_all=True,
-            append_images=frames[1:],
+            append_images=converted_frames[1:],
             duration=duration,
             loop=loop,
             optimize=True
@@ -52,15 +70,22 @@ def create_gif(image_paths, output_path, duration=100, loop=0, resize=None, opti
     if not image_paths:
         raise ValueError("至少需要一张图片")
 
+    if not output_path:
+        raise ValueError("请先设置输出文件路径")
+
+    # 检查输出路径是否包含目录部分
+    output_dir = os.path.dirname(output_path)
+    if not output_dir:
+        raise ValueError("输出路径必须包含目录部分，请选择完整的文件路径")
+
     # 确保输出目录存在
-    output_dir = os.path.dirname(os.path.abspath(output_path))
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     # 加载和处理所有图片
     images = []
     total_images = len(image_paths)
-    
+
     for i, img_path in enumerate(image_paths):
         try:
             img = Image.open(img_path)
@@ -68,14 +93,14 @@ def create_gif(image_paths, output_path, duration=100, loop=0, resize=None, opti
                 img = img.resize(resize, Image.Resampling.LANCZOS)
             # 转换为调色板模式以优化GIF
             if img.mode != 'P':
-                img = img.convert('P', palette=Image.Palette.ADAPTIVE)
+                img = img.convert('P', palette=Image.ADAPTIVE)
             images.append(img)
-            
+
             # 调用进度回调
             if progress_callback:
                 progress = int((i + 1) / total_images * 80)  # 加载图片占80%
                 progress_callback(progress)
-                
+
         except Exception as e:
             print(f"警告: 无法加载图片 {img_path}: {e}")
             if progress_callback:
@@ -95,11 +120,11 @@ def create_gif(image_paths, output_path, duration=100, loop=0, resize=None, opti
         loop=loop,
         optimize=optimize
     )
-    
+
     # 完成
     if progress_callback:
         progress_callback(100)
-        
+
     print(f"GIF已成功创建: {output_path}")
 
 
@@ -110,10 +135,36 @@ def create_gif_from_gui(main_window_instance):
     """
     from tkinter import messagebox
     from .file_manager import validate_gif_params
+    from .ui_operations import browse_output
+
+    # 检查输出路径是否已设置
+    output_path = main_window_instance.output_path.get()
+
+    # 更严格的路径检查：
+    # 1. 如果路径为空
+    # 2. 或者只是一个文件名（没有目录部分）
+    # 3. 或者目录不存在
+    path_is_empty = not output_path
+    has_no_directory = path_is_empty or not os.path.dirname(output_path)
+    directory_does_not_exist = not path_is_empty and os.path.dirname(output_path) and not os.path.exists(os.path.dirname(output_path))
+
+    if path_is_empty or has_no_directory or directory_does_not_exist:
+        # 如果输出路径未设置，强制提示用户选择
+        result = messagebox.askyesno("提示", "尚未设置输出文件路径\n是否现在选择？")
+        if result:
+            browse_output(main_window_instance)
+            output_path = main_window_instance.output_path.get()
+            # 再次检查输出路径是否已设置
+            if not output_path:
+                messagebox.showwarning("警告", "未设置输出路径，无法创建GIF")
+                return
+        else:
+            messagebox.showwarning("警告", "未设置输出路径，无法创建GIF")
+            return
 
     is_valid, error_msg = validate_gif_params(
         main_window_instance.image_paths,
-        main_window_instance.output_path.get(),
+        output_path,
         main_window_instance.resize_width.get(),
         main_window_instance.resize_height.get()
     )
@@ -130,18 +181,18 @@ def create_gif_from_gui(main_window_instance):
         except ValueError:
             pass
 
-    #  GIF
+    # 创建GIF
     try:
         create_gif(
             image_paths=main_window_instance.image_paths,
-            output_path=main_window_instance.output_path.get(),
+            output_path=output_path,
             duration=main_window_instance.duration.get(),
             loop=main_window_instance.loop.get(),
             resize=resize,
             optimize=main_window_instance.optimize.get()
         )
 
-        messagebox.showinfo("成功", f"GIF已成功创建\n{main_window_instance.output_path.get()}")
+        messagebox.showinfo("成功", f"GIF已成功创建\n{output_path}")
 
     except Exception as e:
         messagebox.showerror("错误", f"创建GIF失败:\n{str(e)}")

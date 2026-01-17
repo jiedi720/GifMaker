@@ -56,6 +56,10 @@ class GifPreviewWindow:
         self.center_window()
         self.window.deiconify()
 
+        # 确保窗口显示在最前面
+        self.window.lift()
+        self.window.focus_force()
+
         # 绑定窗口关闭事件
         self.window.protocol("WM_DELETE_WINDOW", self.on_close)
 
@@ -520,21 +524,31 @@ class GifPreviewWindow:
 
     def save_gif(self):
         """保存GIF"""
-        # 如果没有设置输出文件路径，弹出目录选择框
-        if not self.output_path:
+        # 如果没有设置输出文件路径，或路径不包含目录部分，弹出文件保存对话框
+        import os
+        if not self.output_path or not os.path.dirname(self.output_path):
             from tkinter import filedialog
-            import os
             import datetime
-            
-            # 弹出目录选择框
-            directory = filedialog.askdirectory(title="选择保存目录")
-            if not directory:
-                return  # 用户取消了选择
             
             # 生成默认文件名
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             default_filename = f"animation_{timestamp}.gif"
-            self.output_path = os.path.join(directory, default_filename)
+            
+            # 弹出文件保存对话框
+            selected_file = filedialog.asksaveasfilename(
+                title="选择输出文件",
+                initialfile=default_filename,
+                defaultextension=".gif",
+                filetypes=[
+                    ("GIF files", "*.gif"),
+                    ("All files", "*.*")
+                ]
+            )
+            
+            if not selected_file:
+                return  # 用户取消了选择
+            
+            self.output_path = selected_file
 
         try:
             from function.gif_operations import save_gif as ops_save_gif

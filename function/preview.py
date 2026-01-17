@@ -35,29 +35,130 @@ def zoom_out_preview(main_window_instance):
 
 def reset_preview_zoom(main_window_instance):
     """
-    重置预览缩放，让每张图片按原图大小显示
-    将预览缩放比例设置为1.0，所有图片按原始尺寸显示
+    重置缩放为原始尺寸（Natural Size）
+
+    功能说明：
+    - 取消一切动态缩放计算
+    - 将图片的显示尺寸直接设置为其物理原始尺寸（Natural Size/Dimensions）
+    - 基于图片自身的 naturalWidth 和 naturalHeight
+    - 缩放比例设置为 1.0，表示 1:1 像素映射
+
+    明确定义：
+    - "重置"是指回归图片自身的原始宽度和高度数值
+    - 而非简单的 1:1 视口填充
+
+    适用场景：
+    - 图片原始尺寸小于窗口：图片按原始尺寸显示，周围留白
+    - 图片原始尺寸大于窗口：图片按原始尺寸显示，超出部分可通过滚动查看
+
     Args:
         main_window_instance: 主窗口实例
     """
     if not main_window_instance.image_paths:
         return
 
+    # 设置缩放比例为 1.0，表示 1:1 像素映射（图片原始尺寸）
     main_window_instance.preview_scale = 1.0
+
+    # 刷新预览显示（始终使用网格预览模式）
     main_window_instance.display_grid_preview()
+
+
+def update_single_preview(main_window_instance):
+    """
+    更新单张图片预览，用于显示当前选中的图片
+    Args:
+        main_window_instance: 主窗口实例
+    """
+    if not main_window_instance.image_paths or main_window_instance.selected_image_index < 0:
+        return
+    
+    main_window_instance.preview_specific_image(main_window_instance.selected_image_index)
 
 
 def fit_preview_to_window(main_window_instance):
     """
-    让预览图片适应窗口，对所有图片生效
-    自动调整缩放比例，使所有图片完整显示在预览区域
+    适应窗口 - 确保所有图片都可见
+
+    功能说明：
+    - 计算合适的缩放比例，使所有图片都完整显示在预览窗口内
+    - 核心约束：必须保证所有图片在窗口内完整显示，不得有任何部分超出视口
+    - 必须保持原始纵横比，严禁拉伸变形
+    - 这是典型的 Object-fit: contain 逻辑，但应用于整个图片集合
+
+    计算逻辑：
+    - 使用当前缩放比例计算所有图片的布局
+    - 检查布局的总尺寸（最大 x 和最大 y）
+    - 如果布局超出窗口，调整缩放比例
+    - 重复计算直到所有图片都能完整显示
+
+    适用场景：
+    - 多张图片：确保所有图片都能完整显示在窗口内
+    - 单张图片：让图片充满窗口的一个维度
+
+    交互关联：
+    - 当窗口尺寸发生变化（Resize）时，需重新计算缩放比例
+
     Args:
         main_window_instance: 主窗口实例
     """
     if not main_window_instance.image_paths:
         return
 
-    main_window_instance.preview_scale = 1.0
+    # 获取Canvas的实际尺寸（视口尺寸）
+    main_window_instance.preview_canvas.update_idletasks()
+    canvas_width = main_window_instance.preview_canvas.winfo_width()
+    canvas_height = main_window_instance.preview_canvas.winfo_height()
+
+    if canvas_width <= 0 or canvas_height <= 0:
+        return
+
+    # 导入布局计算函数
+    from function.image_utils import calculate_grid_layout
+
+    # 二分查找法找到合适的缩放比例
+    min_scale = 0.01
+    max_scale = 5.0
+    best_scale = 1.0
+    tolerance = 0.001
+
+    for _ in range(20):  # 最多迭代20次
+        test_scale = (min_scale + max_scale) / 2
+
+        # 使用测试缩放比例计算布局
+        layout = calculate_grid_layout(
+            main_window_instance.image_paths,
+            main_window_instance.pending_crops,
+            test_scale,
+            canvas_width=canvas_width,
+            canvas_height=canvas_height
+        )
+
+        if not layout:
+            break
+
+        # 计算布局的总尺寸
+        max_x = max(item['position'][0] + item['size'][0] for item in layout)
+        max_y = max(item['position'][1] + item['size'][1] for item in layout)
+
+        # 检查布局是否能完整显示在Canvas中（考虑padding）
+        padding = 10
+        if max_x <= canvas_width - padding and max_y <= canvas_height - padding:
+            # 布局可以完整显示，尝试更大的缩放比例
+            best_scale = test_scale
+            min_scale = test_scale
+        else:
+            # 布局超出窗口，尝试更小的缩放比例
+            max_scale = test_scale
+
+        # 如果缩放范围已经很小，停止迭代
+        if max_scale - min_scale < tolerance:
+            break
+
+    # 应用最佳缩放比例
+    main_window_instance.preview_scale = best_scale
+
+    # 刷新预览显示（始终使用网格预览模式）
     main_window_instance.display_grid_preview()
 
 
@@ -166,33 +267,15 @@ def preview_gif(main_window_instance):
         messagebox.showwarning("提示", "请先选择至少一张图片")
         return
 
-    # 检查是否需要调整尺寸
-    resize = None
-    if main_window_instance.resize_width.get() and main_window_instance.resize_height.get():
-        try:
-            width = int(main_window_instance.resize_width.get())
-            height = int(main_window_instance.resize_height.get())
-            if width > 0 and height > 0:
-                resize = (width, height)
-            else:
-                messagebox.showerror("错误", "尺寸参数必须大于0")
-                return
-        except ValueError:
-            messagebox.showerror("错误", "尺寸参数必须是数字")
-            return
-
     try:
         # 加载并处理所有图片帧
         frames = []
         duration = main_window_instance.duration.get()
+        loop = main_window_instance.loop.get()
 
         for img_path in main_window_instance.image_paths:
             try:
                 img = Image.open(img_path)
-
-                # 如果设置了尺寸，则调整图片大小
-                if resize:
-                    img = img.resize(resize, Image.Resampling.LANCZOS)
 
                 # 转换为调色板模式以优化GIF
                 if img.mode != 'P':
@@ -207,8 +290,8 @@ def preview_gif(main_window_instance):
             raise ValueError("没有成功加载任何图片")
 
         # 创建预览窗口
-        from gui.preview_gui import GifPreviewWindow
-        preview_window = GifPreviewWindow(main_window_instance.root, frames, duration, main_window_instance.output_path.get())
+        from gui.gifpreview_gui import GifPreviewWindow
+        preview_window = GifPreviewWindow(main_window_instance.root, frames, duration, main_window_instance.output_path.get(), loop)
 
     except Exception as e:
         messagebox.showerror("错误", f"预览GIF失败:\n{str(e)}")

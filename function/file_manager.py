@@ -70,6 +70,7 @@ def select_images(main_window_instance):
     """
     选择图片文件
     打开文件选择对话框，让用户选择要制作GIF的图片文件
+    选择新图片时会清除已有的图片，只保留新选择的图片
     """
 
     files = filedialog.askopenfilenames(
@@ -80,26 +81,54 @@ def select_images(main_window_instance):
         ]
     )
     if files:
-        main_window_instance.image_paths = remove_duplicates_preserve_order(
-            main_window_instance.image_paths + list(files)
-        )
-        main_window_instance.display_grid_preview()
+        # 保存当前状态到历史记录
+        from function.history_manager import save_state as save_main_window_state
+        save_main_window_state(main_window_instance)
+
+        # 清除已有图片，只保留新选择的图片
+        main_window_instance.image_paths = list(files)
+
+        # 重置选择状态
+        main_window_instance.selected_image_indices = set()
+        main_window_instance.selected_image_index = -1
+        main_window_instance.last_selected_index = -1
+        main_window_instance.pending_crops = {}
+        main_window_instance.pending_crop_coords = {}
+
+        # 使用适应窗口模式
+        from function.preview import fit_preview_to_window
+        fit_preview_to_window(main_window_instance)
 
 
 def select_directory(main_window_instance):
     """
     选择包含图片的目录
     打开目录选择对话框，自动获取目录中所有图片文件
+    选择新目录时会清除已有的图片，只保留新选择的图片
     """
     directory = filedialog.askdirectory(title="选择包含图片的目录")
     if directory:
+        # 获取目录中的图片文件
         image_files = get_image_files(directory)
-        main_window_instance.image_paths = remove_duplicates_preserve_order(
-            main_window_instance.image_paths + image_files
-        )
-        # 更新图片列表显示
-        main_window_instance.display_grid_preview()
 
+        if image_files:
+            # 保存当前状态到历史记录
+            from function.history_manager import save_state as save_main_window_state
+            save_main_window_state(main_window_instance)
+
+            # 清除已有图片，只保留新选择的图片
+            main_window_instance.image_paths = image_files
+
+            # 重置选择状态
+            main_window_instance.selected_image_indices = set()
+            main_window_instance.selected_image_index = -1
+            main_window_instance.last_selected_index = -1
+            main_window_instance.pending_crops = {}
+            main_window_instance.pending_crop_coords = {}
+
+            # 使用适应窗口模式
+            from function.preview import fit_preview_to_window
+            fit_preview_to_window(main_window_instance)
 
 def clear_images(main_window_instance):
     """
@@ -113,6 +142,9 @@ def clear_images(main_window_instance):
     main_window_instance.selected_image_indices = set()
     main_window_instance.selected_image_index = -1
     main_window_instance.last_selected_index = -1
+    main_window_instance.pending_crops = {}
+    main_window_instance.pending_crop_coords = {}
+    main_window_instance.preview_scale = 1.0
     main_window_instance.display_grid_preview()
 
 

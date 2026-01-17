@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 GIF预览模块
 包含GIF动画预览相关的界面和功能
@@ -13,10 +14,11 @@ from PIL import Image, ImageTk
 class GifPreviewWindow:
     """GIF预览窗口"""
 
-    def __init__(self, parent, frames, duration, output_path):
+    def __init__(self, parent, frames, duration, output_path, loop=0):
         self.frames = frames
         self.duration = duration
         self.output_path = output_path
+        self.loop = loop  # 循环次数，0表示无限循环
         self.current_frame_index = 0
         self.is_playing = False
         self.animation_id = None
@@ -28,44 +30,12 @@ class GifPreviewWindow:
         self.window = tk.Toplevel(parent)
         self.window.title("GIF Preview")
 
-        # 根据第一帧图片的原始大小设置窗口大小
-        if self.frames:
-            first_frame = self.frames[0]
-            img_width, img_height = first_frame.size
+        # 使用固定窗口尺寸
+        self.window_width = 1500
+        self.window_height = 800
 
-            # 计算合适的窗口大小（以图片原始大小为主?            # 考虑屏幕大小限制
-            screen_width = self.window.winfo_screenwidth()
-            screen_height = self.window.winfo_screenheight()
-
-            # 设置最大窗口尺寸，不超过屏幕的80%
-            max_width = int(screen_width * 0.8)
-            max_height = int(screen_height * 0.8) - 150  # 预留控制区域空间
-
-            # 如果图片原始尺寸过大，则按比例缩放
-            if img_width > max_width or img_height > max_height:
-                scale = min(max_width / img_width, max_height / img_height)
-                window_width = int(img_width * scale)
-                window_height = int(img_height * scale)
-            else:
-                # 使用图片原始尺寸，加上控制区域和边距
-                window_width = min(img_width + 40, max_width)  # 加上边距
-                window_height = min(img_height + 150, max_height)  # 加上控制区域
-
-            # 确保窗口不会太小
-            window_width = max(window_width, 400)
-            window_height = max(window_height, 400)
-
-            # 调整为16:9的长宽比
-            if window_width / window_height > 16 / 9:
-                # 宽度过大，调整宽度
-                window_width = int(window_height * 16 / 9)
-            else:
-                # 高度过大，调整高度
-                window_height = int(window_width * 9 / 16)
-
-            self.window.geometry(f"{window_width}x{window_height}")
-        else:
-            self.window.geometry("800x450")  # 16:9比例
+        # 直接使用固定尺寸，不根据图片调整
+        self.window.geometry(f"{self.window_width}x{self.window_height}")
 
         # 先隐藏窗口，防止闪烁
         self.window.withdraw()
@@ -76,12 +46,14 @@ class GifPreviewWindow:
         # 创建UI
         self.setup_ui()
 
-        # 显示第一?        self.display_frame(0)
+        # 显示第一帧
+        self.display_frame(0)
 
         # 默认适应窗口
         self.fit_to_window()
 
-        # 居中显示并恢复窗口显?        self.center_window()
+        # 居中显示并恢复窗口显示
+        self.center_window()
         self.window.deiconify()
 
         # 绑定窗口关闭事件
@@ -101,12 +73,12 @@ class GifPreviewWindow:
         self.window.update_idletasks()
         width = self.window.winfo_width()
         height = self.window.winfo_height()
-        
-        # 如果窗口还没有显示，使用设置的默认尺寸
+
+        # 如果窗口还没有显示，使用保存的窗口尺寸
         if width <= 1 or height <= 1:
-            width = 800
-            height = 450
-        
+            width = self.window_width
+            height = self.window_height
+
         screen_width = self.window.winfo_screenwidth()
         screen_height = self.window.winfo_screenheight()
         x = (screen_width // 2) - (width // 2)
@@ -133,7 +105,7 @@ class GifPreviewWindow:
         self.canvas_frame.rowconfigure(0, weight=1)
 
         # 创建Canvas和滚动条
-        self.canvas = tk.Canvas(self.canvas_frame, bg='white')
+        self.canvas = tk.Canvas(self.canvas_frame, bg='#313337')
         self.scroll_y = ttk.Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
         self.scroll_x = ttk.Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
         self.canvas.configure(yscrollcommand=self.scroll_y.set, xscrollcommand=self.scroll_x.set)
@@ -206,6 +178,18 @@ class GifPreviewWindow:
         )
         self.duration_spin.pack(side=tk.LEFT, padx=(0, 10))
 
+        # 循环次数设置
+        ttk.Label(left_container, text="循环次数(0=无限):").pack(side=tk.LEFT, padx=(0, 5))
+        self.loop_var = tk.IntVar(value=self.loop)
+        self.loop_spin = ttk.Spinbox(
+            left_container,
+            from_=0,
+            to=999,
+            textvariable=self.loop_var,
+            width=5
+        )
+        self.loop_spin.pack(side=tk.LEFT, padx=(0, 10))
+
         # 分隔线
         ttk.Separator(left_container, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=10)
 
@@ -254,9 +238,9 @@ class GifPreviewWindow:
 
         btn_reset_zoom = ttk.Button(right_container, text="🔄", command=self.reset_zoom, width=5)
         btn_reset_zoom.pack(side=tk.LEFT, padx=(0, 5))
-        self.create_tooltip(btn_reset_zoom, "重置缩放")
+        self.create_tooltip(btn_reset_zoom, "原始大小")
 
-        btn_fit_window = ttk.Button(right_container, text="适应", command=self.fit_to_window, width=5)
+        btn_fit_window = ttk.Button(right_container, text="⬜", command=self.fit_to_window, width=5)
         btn_fit_window.pack(side=tk.LEFT, padx=(0, 5))
         self.create_tooltip(btn_fit_window, "适应窗口")
 
@@ -448,7 +432,7 @@ class GifPreviewWindow:
             self.display_frame(self.current_frame_index)
 
     def reset_zoom(self):
-        """重置缩放"""
+        """原始大小 - 按图片原始尺寸显示"""
         self.zoom_scale = 1.0
         # 清除缓存，因为缩放比例改变了
         self.photo_cache.clear()
@@ -460,11 +444,12 @@ class GifPreviewWindow:
         if not self.frames:
             return
 
-        # 获取第一帧的原始尺寸
-        first_frame = self.frames[0]
-        orig_width, orig_height = first_frame.size
+        # 获取当前帧的原始尺寸
+        current_frame = self.frames[self.current_frame_index]
+        orig_width, orig_height = current_frame.size
 
-        # 获取Canvas的实际尺?        self.canvas_frame.update_idletasks()
+        # 获取Canvas的实际尺寸
+        self.canvas_frame.update_idletasks()
         canvas_width = self.canvas.winfo_width() - 20  # 减去padding
         canvas_height = self.canvas.winfo_height() - 20  # 减去padding
 
@@ -535,13 +520,25 @@ class GifPreviewWindow:
 
     def save_gif(self):
         """保存GIF"""
+        # 如果没有设置输出文件路径，弹出目录选择框
         if not self.output_path:
-            messagebox.showwarning("提示", "请先设置输出文件路径")
-            return
+            from tkinter import filedialog
+            import os
+            import datetime
+            
+            # 弹出目录选择框
+            directory = filedialog.askdirectory(title="选择保存目录")
+            if not directory:
+                return  # 用户取消了选择
+            
+            # 生成默认文件名
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            default_filename = f"animation_{timestamp}.gif"
+            self.output_path = os.path.join(directory, default_filename)
 
         try:
             from function.gif_operations import save_gif as ops_save_gif
-            ops_save_gif(self.frames, self.output_path, self.duration_var.get())
+            ops_save_gif(self.frames, self.output_path, self.duration_var.get(), self.loop_var.get())
             messagebox.showinfo("成功", f"GIF已保存到:\n{self.output_path}")
         except Exception as e:
             messagebox.showerror("错误", f"保存GIF失败:\n{str(e)}")

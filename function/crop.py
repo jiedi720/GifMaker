@@ -171,20 +171,19 @@ class CropRatioHandler:
 
             orig_width, orig_height = dialog_instance.original_image.size
 
-            #  Canvas
-            canvas_width = dialog_instance.canvas.winfo_width() - 20  #  padding
-            canvas_height = dialog_instance.canvas.winfo_height() - 20  #  padding
+            #  Canvas（与display_image保持一致）
+            canvas_width = dialog_instance.canvas.winfo_width()
+            canvas_height = dialog_instance.canvas.winfo_height()
 
             #  Canvas
             if canvas_width < 100:
-                canvas_width = orig_width
+                canvas_width = 800
             if canvas_height < 100:
-                canvas_height = orig_height
+                canvas_height = 600
 
-
-            scaled_width, scaled_height, fit_scale = calculate_scaled_dimensions(
-                orig_width, orig_height, canvas_width, canvas_height, padding=20
-            )
+            # 直接使用calculate_scale_to_fit，与display_image保持一致
+            from .image_utils import calculate_scale_to_fit
+            fit_scale = calculate_scale_to_fit(orig_width, orig_height, canvas_width, canvas_height)
 
             dialog_instance.preview_scale = fit_scale
             dialog_instance.display_image()

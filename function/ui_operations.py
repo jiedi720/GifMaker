@@ -77,7 +77,7 @@ def on_file_selected(main_window_instance, event):
     """
     处理文件选择变化事件
     当用户从下拉框中选择不同的图片时，更新预览显示
-    
+
     Args:
         main_window_instance: GifMakerGUI实例
         event: 事件对象
@@ -85,12 +85,14 @@ def on_file_selected(main_window_instance, event):
     try:
         current_selection = main_window_instance.file_combobox.current()
         if current_selection >= 0 and current_selection < len(main_window_instance.image_paths):
+            # 设置选中的图片索引
             main_window_instance.selected_image_index = current_selection
-            
-            # 更新预览
-            from function.preview import update_single_preview
-            update_single_preview(main_window_instance)
-            
+            main_window_instance.selected_image_indices = {current_selection}
+            main_window_instance.last_selected_index = current_selection
+
+            # 更新预览（使用网格布局，确保缩放按钮有效）
+            main_window_instance.display_grid_preview()
+
             # 更新状态信息
             update_status_info(main_window_instance)
     except Exception as e:

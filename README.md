@@ -142,7 +142,7 @@ GifMaker/
 │   ├── __init__.py
 │   ├── main_window.py       # 主窗口
 │   ├── crop_gui.py          # 裁剪对话框
-│   └── preview_gui.py       # 预览窗口
+│   └── gifpreview_gui.py    # 预览窗口
 └── icons/                   # 图标资源
     └── gif.png
 ```

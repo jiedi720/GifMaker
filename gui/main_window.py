@@ -9,6 +9,7 @@ import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
+from tkinterdnd2 import DND_FILES, TkinterDnD
 
 # 添加项目根目录到系统路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -272,12 +273,6 @@ class GifMakerGUI:
         btn_preview_gif.pack(side=tk.LEFT, padx=(0, 3))
         self.create_tooltip(btn_preview_gif, "预览GIF")
 
-        # 生成GIF按钮
-        from function.gif_operations import create_gif_from_gui
-        btn_create_gif = ttk.Button(control_frame, text="🚀", command=lambda: create_gif_from_gui(self), width=5)
-        btn_create_gif.pack(side=tk.LEFT, padx=(0, 3))
-        self.create_tooltip(btn_create_gif, "生成GIF")
-
         # 分隔线
         ttk.Separator(control_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=5)
 
@@ -293,9 +288,9 @@ class GifMakerGUI:
 
         btn_reset_zoom = ttk.Button(control_frame, text="🔄", command=lambda: reset_preview_zoom(self), width=5)
         btn_reset_zoom.pack(side=tk.LEFT, padx=(0, 5))
-        self.create_tooltip(btn_reset_zoom, "重置缩放")
+        self.create_tooltip(btn_reset_zoom, "原始大小")
 
-        btn_fit_window = ttk.Button(control_frame, text="适应", command=lambda: fit_preview_to_window(self), width=5)
+        btn_fit_window = ttk.Button(control_frame, text="⬜", command=lambda: fit_preview_to_window(self), width=5)
         btn_fit_window.pack(side=tk.LEFT, padx=(0, 5))
         self.create_tooltip(btn_fit_window, "适应窗口")
 
@@ -310,29 +305,6 @@ class GifMakerGUI:
         # 百分比标签
         ttk.Label(control_frame, text="%").pack(side=tk.LEFT, padx=(0, 5))
 
-        # GIF参数设置区域
-        param_frame = ttk.Frame(main_frame, padding="5")
-        param_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
-
-        # 每帧时间设置
-        ttk.Label(param_frame, text="每帧时间(ms):").pack(side=tk.LEFT, padx=(0, 5))
-        duration_spin = ttk.Spinbox(param_frame, from_=100, to=10000, increment=100, textvariable=self.duration, width=5)
-        duration_spin.pack(side=tk.LEFT, padx=(0, 10))
-
-        # 循环次数设置
-        ttk.Label(param_frame, text="循环次数(0=无限):").pack(side=tk.LEFT, padx=(0, 5))
-        loop_spin = ttk.Spinbox(param_frame, from_=0, to=999, textvariable=self.loop, width=5)
-        loop_spin.pack(side=tk.LEFT, padx=(0, 10))
-
-        # 尺寸调整设置
-        ttk.Label(param_frame, text="调整尺寸:").pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Entry(param_frame, textvariable=self.resize_width, width=5).pack(side=tk.LEFT, padx=(0, 3))
-        ttk.Label(param_frame, text="x").pack(side=tk.LEFT, padx=(0, 3))
-        ttk.Entry(param_frame, textvariable=self.resize_height, width=5).pack(side=tk.LEFT, padx=(3, 10))
-
-        # GIF优化选项
-        ttk.Checkbutton(param_frame, text="优化GIF", variable=self.optimize).pack(side=tk.LEFT)
-
         # 图片预览区域
         preview_outer_frame = ttk.LabelFrame(main_frame, text="图片预览", padding="1")
         preview_outer_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(1, 0))
@@ -346,10 +318,14 @@ class GifMakerGUI:
         self.preview_frame.rowconfigure(0, weight=1)
 
         # 创建Canvas和滚动条
-        self.preview_canvas = tk.Canvas(self.preview_frame, bg='white', highlightthickness=0)
+        self.preview_canvas = tk.Canvas(self.preview_frame, bg='#313337', highlightthickness=0)
         self.scroll_y = ttk.Scrollbar(self.preview_frame, orient="vertical", command=self.preview_canvas.yview)
         self.scroll_x = ttk.Scrollbar(self.preview_frame, orient="horizontal", command=self.preview_canvas.xview)
         self.preview_canvas.configure(yscrollcommand=self.scroll_y.set, xscrollcommand=self.scroll_x.set)
+
+        # 启用拖拽功能
+        self.preview_canvas.drop_target_register(DND_FILES)
+        self.preview_canvas.dnd_bind('<<Drop>>', self.on_drop_files)
 
         # 布局Canvas和滚动条
         self.preview_canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -468,26 +444,8 @@ class GifMakerGUI:
             # 获取原始尺寸
             orig_width, orig_height = img.size
 
-            # 获取Canvas可用空间
-            self.preview_canvas.update_idletasks()
-            preview_width = self.preview_canvas.winfo_width() - 20
-            preview_height = self.preview_canvas.winfo_height() - 20
-
-            # 如果Canvas尺寸过小，使用原始尺寸
-            if preview_width < 50:
-                preview_width = orig_width
-            if preview_height < 50:
-                preview_height = orig_height
-
-            # 计算适应Canvas的缩放比例
-            base_scale = min(preview_width / orig_width, preview_height / orig_height)
-
-            # 如果预览缩放比例为1.0，则按原始尺寸显示
-            # 否则使用用户设置的缩放比例
-            if self.preview_scale == 1.0:
-                scale = 1.0
-            else:
-                scale = self.preview_scale
+            # 直接使用全局的预览缩放比例
+            scale = self.preview_scale
 
             # 计算缩放后的尺寸
             scaled_width = int(orig_width * scale)
@@ -502,6 +460,13 @@ class GifMakerGUI:
 
             # 转换为Tkinter PhotoImage对象
             self.current_photo = ImageTk.PhotoImage(img_resized)
+
+            # 尝试获取现有图片项的坐标，如果失败则重新创建
+            try:
+                self.preview_canvas.coords(self.preview_image_id)
+            except tk.TclError:
+                # 如果图片项不存在，重新创建
+                self.preview_image_id = self.preview_canvas.create_image(0, 0, anchor=tk.CENTER, image=None)
 
             # 更新Canvas中的图片
             self.preview_canvas.itemconfig(self.preview_image_id, image=self.current_photo)
@@ -533,20 +498,6 @@ class GifMakerGUI:
         """
         以网格方式显示所有图片，从上到下，从左到右排列，根据图片尺寸调节每列的图片数
         """
-        if not self.image_paths:
-            return
-
-        # 计算网格布局
-        from function.image_utils import calculate_grid_layout
-        layout_data = calculate_grid_layout(
-            self.image_paths,
-            self.pending_crops,
-            self.preview_scale
-        )
-
-        if not layout_data:
-            return
-
         # 清空Canvas和缓存
         self.preview_canvas.delete("all")
         self.image_rects.clear()
@@ -563,6 +514,20 @@ class GifMakerGUI:
         else:
             self.file_combobox['values'] = []
             self.file_combobox.set('')
+
+        if not self.image_paths:
+            return
+
+        # 计算网格布局
+        from function.image_utils import calculate_grid_layout
+        layout_data = calculate_grid_layout(
+            self.image_paths,
+            self.pending_crops,
+            self.preview_scale
+        )
+
+        if not layout_data:
+            return
 
         # 获取Canvas实际尺寸
         self.preview_canvas.update_idletasks()
@@ -598,6 +563,14 @@ class GifMakerGUI:
 
                 # 在Canvas上显示图片
                 self.preview_canvas.create_image(x, y, image=photo, anchor=tk.NW, tags=f"image_{item['index']}")
+
+                # 为所有图片添加细边框
+                self.preview_canvas.create_rectangle(
+                    x, y, x + size[0], y + size[1],
+                    outline="#CCCCCC",
+                    width=1,
+                    tags=f"border_{item['index']}"
+                )
 
                 # 保存图片矩形区域信息
                 rect = {
@@ -647,6 +620,59 @@ class GifMakerGUI:
             scroll_height = max(max_y + 10, canvas_height)
             self.preview_canvas.configure(scrollregion=(0, 0, scroll_width, scroll_height))
 
+        # 绘制选中框
+        if self.selected_image_indices:
+            self.draw_selection_boxes()
+
+        # 滚动到选中的图片
+        if self.selected_image_index >= 0 and self.selected_image_index < len(self.image_rects):
+            self.scroll_to_image(self.selected_image_index)
+
+    def scroll_to_image(self, image_index):
+        """
+        滚动到指定索引的图片，确保该图片在可视区域内
+        Args:
+            image_index: 图片索引
+        """
+        if image_index < 0 or image_index >= len(self.image_rects):
+            return
+
+        rect = self.image_rects[image_index]
+        canvas_width = self.preview_canvas.winfo_width()
+        canvas_height = self.preview_canvas.winfo_height()
+
+        # 获取当前滚动位置
+        scroll_x = self.preview_canvas.canvasx(0)
+        scroll_y = self.preview_canvas.canvasy(0)
+
+        # 计算图片中心点
+        img_center_x = (rect['x1'] + rect['x2']) / 2
+        img_center_y = (rect['y1'] + rect['y2']) / 2
+
+        # 计算目标滚动位置（使图片居中）
+        target_x = max(0, img_center_x - canvas_width / 2)
+        target_y = max(0, img_center_y - canvas_height / 2)
+
+        # 获取滚动区域的总尺寸
+        scrollregion = self.preview_canvas.cget("scrollregion")
+        if scrollregion:
+            parts = scrollregion.split()
+            if len(parts) == 4:
+                max_scroll_x = float(parts[2])
+                max_scroll_y = float(parts[3])
+
+                # 计算滚动比例
+                scroll_x_ratio = target_x / max_scroll_x
+                scroll_y_ratio = target_y / max_scroll_y
+
+                # 限制滚动比例在 0-1 之间
+                scroll_x_ratio = max(0, min(1, scroll_x_ratio))
+                scroll_y_ratio = max(0, min(1, scroll_y_ratio))
+
+                # 执行滚动
+                self.preview_canvas.xview_moveto(scroll_x_ratio)
+                self.preview_canvas.yview_moveto(scroll_y_ratio)
+
     def draw_selection_box(self, index):
         """绘制选中框（单选）"""
         self.selected_image_indices = {index}
@@ -667,6 +693,9 @@ class GifMakerGUI:
                     width=5,
                     tags="selection_box"
                 )
+
+        # 确保选中框在最上层
+        self.preview_canvas.tag_raise("selection_box")
 
     def on_preview_left_click(self, event):
         """处理预览区域左键点击事件，用于选择和拖拽图片"""
@@ -1010,6 +1039,7 @@ class GifMakerGUI:
         context_menu = tk.Menu(self.root, tearoff=0)
         from function.ui_operations import enter_crop_mode
         from function.list_operations import show_image_properties, open_image_location, open_with_default_viewer, copy_images, cut_images, paste_images, delete_images
+
         context_menu.add_command(label="进入裁剪模式", command=lambda: enter_crop_mode(self))
         context_menu.add_separator()
         context_menu.add_command(label="复制", command=lambda: copy_images(self, index))
@@ -1032,13 +1062,113 @@ class GifMakerGUI:
         from function.list_operations import select_all_images as ops_select_all_images
         ops_select_all_images(self, event)
 
+    def on_drop_files(self, event):
+        """
+        处理拖拽文件到预览窗口的事件
+        支持拖拽单个或多个文件、目录
+        拖拽时会清除已有图片
+        """
+        try:
+            # 解析拖拽的文件/目录列表
+            data = event.data
+            if not data:
+                return
+
+            # 处理Windows格式的拖拽数据
+            # 格式1: {文件1 文件2 文件3} - 所有文件在一个花括号内
+            # 格式2: {文件1} {文件2} {文件3} - 每个文件都有自己的花括号
+            # 格式3: {"文件 1" "文件 2" "文件 3"} - 带空格的路径用引号包围
+            paths = []
+
+            # 先尝试提取所有花括号内的内容
+            import re
+            bracket_matches = re.findall(r'\{([^}]*)\}', data)
+
+            if bracket_matches:
+                # 如果找到花括号，提取其中的内容
+                for match in bracket_matches:
+                    match = match.strip()
+                    if match:
+                        # 检查是否包含引号（可能是带空格的路径）
+                        if '"' in match or "'" in match:
+                            # 使用正则表达式提取引号内的内容
+                            quoted_matches = re.findall(r'["\']([^"\']+)["\']', match)
+                            if quoted_matches:
+                                paths.extend([m.strip() for m in quoted_matches if m.strip()])
+                            else:
+                                # 如果没有匹配到引号内容，直接添加
+                                paths.append(match)
+                        elif ' ' in match and not os.path.exists(match):
+                            # 如果包含空格且不是有效路径，尝试分割
+                            split_paths = match.split()
+                            paths.extend([p.strip() for p in split_paths if p.strip()])
+                        else:
+                            # 否则直接添加
+                            paths.append(match)
+            else:
+                # 如果没有花括号，直接使用原始数据
+                paths.append(data.strip())
+
+            # 如果提取到的路径为空，尝试直接分割
+            if not paths:
+                # 移除外层花括号
+                if data.startswith('{') and data.endswith('}'):
+                    data = data[1:-1]
+
+                # 分割多个文件/目录
+                paths = [p.strip() for p in data.split() if p.strip()]
+
+            if not paths:
+                return
+
+            # 收集所有图片文件
+            image_paths = []
+            from function.file_manager import get_image_files, validate_image_path
+
+            for path in paths:
+                # 移除可能的引号
+                path = path.strip('"').strip("'")
+
+                if os.path.isdir(path):
+                    # 如果是目录，获取目录中的所有图片
+                    dir_images = get_image_files(path)
+                    if dir_images:
+                        image_paths.extend(dir_images)
+                elif os.path.isfile(path):
+                    # 如果是文件，检查是否是有效的图片文件
+                    if validate_image_path(path):
+                        image_paths.append(path)
+
+            if image_paths:
+                # 保存当前状态到历史记录
+                from function.history_manager import save_state
+                save_state(self)
+
+                # 清除已有图片，只保留新拖拽的图片
+                self.image_paths = image_paths
+
+                # 重置选择状态
+                self.selected_image_indices = set()
+                self.selected_image_index = -1
+                self.last_selected_index = -1
+                self.pending_crops = {}
+                self.pending_crop_coords = {}
+
+                # 使用适应窗口模式
+                from function.preview import fit_preview_to_window
+                fit_preview_to_window(self)
+
+        except Exception as e:
+            print(f"拖拽文件处理失败: {e}")
+            messagebox.showerror("错误", f"拖拽文件处理失败: {str(e)}")
+
 
 def run():
     """
     启动GIF Maker GUI应用
     创建主窗口并启动事件循环
     """
-    root = tk.Tk()
+    root = TkinterDnD.Tk()
     app = GifMakerGUI(root)
     root.mainloop()
 

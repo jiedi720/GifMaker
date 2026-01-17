@@ -156,7 +156,7 @@ def calculate_grid_layout(image_paths, pending_crops, preview_scale=1.0, thumbna
         image_paths: 图片路径列表
         pending_crops: 待裁剪的图片集合
         preview_scale: 预览缩放比例
-        thumbnail_size: 缩略图大小 (width, height)
+        thumbnail_size: 缩略图大小 (width, height) - 仅在 preview_scale=1.0 且图片尺寸未知时使用
         canvas_width: Canvas宽度（可选，默认800）
         canvas_height: Canvas高度（可选，默认600）
 
@@ -175,19 +175,67 @@ def calculate_grid_layout(image_paths, pending_crops, preview_scale=1.0, thumbna
     if not image_paths:
         return []
 
-    # 计算可用的缩略图大小
-    thumb_width = int(thumbnail_size[0] * preview_scale)
-    thumb_height = int(thumbnail_size[1] * preview_scale)
-
     # 使用传入的Canvas尺寸或默认值
     if canvas_width is None:
         canvas_width = 800
     if canvas_height is None:
         canvas_height = 600
 
+    # 加载所有图片获取实际尺寸
+    image_sizes = []
+    for img_path in image_paths:
+        img = load_image(img_path)
+        if img:
+            image_sizes.append((img.width, img.height))
+        else:
+            # 如果加载失败，使用默认尺寸
+            image_sizes.append((200, 150))
+
+    # 计算每张图片的显示尺寸
+    display_sizes = []
+    for i, (img_width, img_height) in enumerate(image_sizes):
+        if preview_scale == 1.0:
+            # 原始大小模式：使用图片的实际尺寸
+            display_sizes.append((img_width, img_height))
+        else:
+            # 缩放模式：根据图片实际尺寸计算缩放后的尺寸
+            display_sizes.append((
+                int(img_width * preview_scale),
+                int(img_height * preview_scale)
+            ))
+
     padding = 10
-    cols = max(1, int(canvas_width / (thumb_width + padding)))
+    
+    # 计算列数：基于所有图片的平均宽度
+    if display_sizes:
+        avg_width = sum(size[0] for size in display_sizes) / len(display_sizes)
+        avg_height = sum(size[1] for size in display_sizes) / len(display_sizes)
+    else:
+        avg_width = 200
+        avg_height = 150
+    
+    cols = max(1, int(canvas_width / (avg_width + padding)))
     rows = (len(image_paths) + cols - 1) // cols
+
+    # 计算每列的最大宽度和每行的最大高度
+    col_widths = [0] * cols
+    row_heights = [0] * rows
+    
+    for i, img_path in enumerate(image_paths):
+        col = i % cols
+        row = i // cols
+        width, height = display_sizes[i]
+        col_widths[col] = max(col_widths[col], width)
+        row_heights[row] = max(row_heights[row], height)
+
+    # 计算每列和每行的起始位置
+    col_positions = [padding]
+    for i in range(1, cols):
+        col_positions.append(col_positions[-1] + col_widths[i-1] + padding)
+    
+    row_positions = [padding]
+    for i in range(1, rows):
+        row_positions.append(row_positions[-1] + row_heights[i-1] + padding)
 
     layout = []
 
@@ -195,14 +243,15 @@ def calculate_grid_layout(image_paths, pending_crops, preview_scale=1.0, thumbna
         col = i % cols
         row = i // cols
 
-        x = padding + col * (thumb_width + padding)
-        y = padding + row * (thumb_height + padding)
+        # 使用该列和该行的起始位置
+        x = col_positions[col]
+        y = row_positions[row]
 
         layout.append({
             'index': i,
             'path': img_path,
             'position': (x, y),
-            'size': (thumb_width, thumb_height),
+            'size': display_sizes[i],
             'col': col,
             'row': row,
             'is_cropped': img_path in pending_crops

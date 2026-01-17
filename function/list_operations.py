@@ -19,18 +19,27 @@ def select_all_images(main_window_instance, event=None):
 
 
 def show_image_properties(main_window_instance, index):
-    """显示图片属性"""
-    if index < 0 or index >= len(main_window_instance.image_paths):
+    """显示图片属性（支持单张和多张图片）"""
+    if not main_window_instance.selected_image_indices:
         return
 
     try:
         from PIL import Image
-        img_path = main_window_instance.image_paths[index]
-        img = Image.open(img_path)
-        width, height = img.size
-        size_kb = os.path.getsize(img_path) / 1024
 
-        info_text = f"""图片属性:
+        selected_indices = sorted(main_window_instance.selected_image_indices)
+
+        if len(selected_indices) == 1:
+            # 单张图片：显示详细属性
+            idx = selected_indices[0]
+            if idx < 0 or idx >= len(main_window_instance.image_paths):
+                return
+
+            img_path = main_window_instance.image_paths[idx]
+            img = Image.open(img_path)
+            width, height = img.size
+            size_kb = os.path.getsize(img_path) / 1024
+
+            info_text = f"""图片属性:
 
 文件名: {os.path.basename(img_path)}
 路径: {img_path}
@@ -39,7 +48,49 @@ def show_image_properties(main_window_instance, index):
 模式: {img.mode}
 文件大小: {size_kb:.2f} KB"""
 
-        messagebox.showinfo("图片属性", info_text)
+            messagebox.showinfo("图片属性", info_text)
+        else:
+            # 多张图片：显示汇总信息
+            total_size_kb = 0
+            min_width = float('inf')
+            min_height = float('inf')
+            max_width = 0
+            max_height = 0
+            formats = set()
+            modes = set()
+
+            for idx in selected_indices:
+                if idx < 0 or idx >= len(main_window_instance.image_paths):
+                    continue
+
+                img_path = main_window_instance.image_paths[idx]
+                img = Image.open(img_path)
+                width, height = img.size
+                size_kb = os.path.getsize(img_path) / 1024
+
+                total_size_kb += size_kb
+                min_width = min(min_width, width)
+                min_height = min(min_height, height)
+                max_width = max(max_width, width)
+                max_height = max(max_height, height)
+                formats.add(img.format)
+                modes.add(img.mode)
+
+            info_text = f"""多张图片属性:
+
+选中数量: {len(selected_indices)} 张
+总文件大小: {total_size_kb:.2f} KB
+平均文件大小: {total_size_kb / len(selected_indices):.2f} KB
+
+尺寸范围:
+  最小: {min_width} x {min_height} 像素
+  最大: {max_width} x {max_height} 像素
+
+格式: {', '.join(sorted(formats))}
+模式: {', '.join(sorted(modes))}"""
+
+            messagebox.showinfo("图片属性", info_text)
+
     except Exception as e:
         messagebox.showerror("错误", f"无法读取图片属性: {str(e)}")
 

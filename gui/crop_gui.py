@@ -34,7 +34,7 @@ class CropDialog:
         self.current_photo = None
         self.original_image = None
         self.base_photo = None
-        self.preview_scale = 1.0
+        self.preview_scale = 0.0  # 初始值为0，表示需要计算适应窗口的缩放比例
         self.initial_scale = 1.0
 
         self.selection_start = None
@@ -77,14 +77,13 @@ class CropDialog:
         self.setup_ui()
         self.center_window()
 
-        from function.history_manager import undo_crop, redo_crop
-        self.dialog.bind('<Control-z>', lambda e: undo_crop(self.crop_state))
-        self.dialog.bind('<Control-y>', lambda e: redo_crop(self.crop_state))
-
-
         if self.image_path:
             from function.image_utils import load_image
-            load_image(self, self.image_path)
+            # 正确加载图片：只传递图片路径，不传递self
+            self.original_image = load_image(self.image_path)
+            if self.original_image:
+                # 延迟显示图片，确保Canvas完全渲染
+                self.dialog.after(100, self.display_image)
 
     def center_window(self):
         """将窗口居中显示"""
@@ -112,22 +111,27 @@ class CropDialog:
             img = self.original_image
             orig_width, orig_height = img.size
 
-            #  Canvas
+            # 强制更新Canvas尺寸
+            self.dialog.update_idletasks()
             self.canvas.update_idletasks()
-            canvas_width = self.canvas.winfo_width() - 20
-            canvas_height = self.canvas.winfo_height() - 20
+            
+            canvas_width = self.canvas.winfo_width()
+            canvas_height = self.canvas.winfo_height()
 
+            # 确保Canvas有合理的尺寸
+            if canvas_width < 100:
+                canvas_width = 800
+            if canvas_height < 100:
+                canvas_height = 600
+
+            # 计算适应窗口的缩放比例
             if not hasattr(self, 'preview_scale') or self.preview_scale == 0:
                 self.preview_scale = calculate_scale_to_fit(orig_width, orig_height, canvas_width, canvas_height)
                 self.initial_scale = self.preview_scale
 
-
-            from function.crop import calculate_scaled_dimensions
-            scaled_width, scaled_height, scale = calculate_scaled_dimensions(
-                orig_width, orig_height, canvas_width, canvas_height
-            )
-            if scale:  #  scale
-                self.preview_scale = scale
+            # 计算缩放后的尺寸
+            scaled_width = int(orig_width * self.preview_scale)
+            scaled_height = int(orig_height * self.preview_scale)
 
             #   image_utils 
             img_resized = resize_image(img, scaled_width, scaled_height)
@@ -156,7 +160,7 @@ class CropDialog:
                 self.image_x = actual_canvas_width // 2
                 self.image_y = actual_canvas_height // 2
                 anchor = tk.CENTER
-                #  Canvas，
+                #  Canvas，设置为Canvas尺寸，确保滚动条始终可见
                 self.canvas.configure(scrollregion=(0, 0, actual_canvas_width, actual_canvas_height))
 
             self.image_width = scaled_width
@@ -193,7 +197,7 @@ class CropDialog:
         self.preview_frame.grid(row=0, column=0, padx=(20, 0), pady=20, sticky="nsew")
 
         #   Canvas 
-        self.canvas = tk.Canvas(self.preview_frame, bg="#333333", highlightthickness=0)
+        self.canvas = tk.Canvas(self.preview_frame, bg="#313337", highlightthickness=0)
         self.scroll_y = ttk.Scrollbar(self.preview_frame, orient="vertical", command=self.canvas.yview)
         self.scroll_x = ttk.Scrollbar(self.preview_frame, orient="horizontal", command=self.canvas.xview)
         self.canvas.configure(yscrollcommand=self.scroll_y.set, xscrollcommand=self.scroll_x.set)
@@ -205,6 +209,7 @@ class CropDialog:
 
         self.preview_frame.columnconfigure(0, weight=1)
         self.preview_frame.rowconfigure(0, weight=1)
+        self.preview_frame.rowconfigure(1, weight=0)  # 确保水平滚动条行不拉伸
 
         self.canvas.bind("<ButtonPress-1>", self.on_canvas_press)
         self.canvas.bind("<B1-Motion>", self.on_canvas_drag)
@@ -325,25 +330,14 @@ class CropDialog:
 
         self.fit_btn = ttk.Button(btn_row1, text="⬜", width=5, command=lambda: self.ratio_handler.fit_to_window(self))
         self.fit_btn.pack(side="left", padx=5)
-        self.create_tooltip(self.fit_btn, "适应窗口 (Fit)")
+        self.create_tooltip(self.fit_btn, "适应窗口")
 
         self.reset_btn = ttk.Button(btn_row1, text="🔄", width=5, command=self.reset_zoom)
         self.reset_btn.pack(side="left", padx=5)
-        self.create_tooltip(self.reset_btn, "重置缩放 (100%)")
+        self.create_tooltip(self.reset_btn, "原始大小")
 
         btn_row2 = ttk.Frame(self.modules_container)
         btn_row2.pack(fill="x", pady=(0, 10))
-
-        from function.history_manager import undo_crop, redo_crop
-        self.undo_btn = ttk.Button(btn_row2, text="↩", width=10, command=lambda: undo_crop(self.crop_state))
-        self.undo_btn.pack(side="left", padx=5)
-        self.create_tooltip(self.undo_btn, "撤销 (Ctrl+Z)")
-
-        self.redo_btn = ttk.Button(btn_row2, text="↪", width=10, command=lambda: redo_crop(self.crop_state))
-        self.redo_btn.pack(side="left", padx=5)
-        self.create_tooltip(self.redo_btn, "重做 (Ctrl+Y)")
-
-        ttk.Separator(btn_row2, orient="vertical").pack(side="left", fill=tk.Y, padx=5)
 
         self.ok_btn = ttk.Button(btn_row2, text="✅", width=15, command=self.ok_clicked)
         self.ok_btn.pack(side="left", padx=5)
@@ -365,12 +359,20 @@ class CropDialog:
         ttk.Label(parent, text=label2).grid(row=row, column=2, sticky="w", padx=5)
         s2 = tk.Spinbox(parent, from_=0, to=9999, textvariable=var2, width=6)
         s2.grid(row=row, column=3, sticky="w", padx=(2, 5), pady=5)
-        #          s2.bind('<Return>', lambda e: update_size_label(self.x1_var, self.y1_var, self.x2_var, self.y2_var, self.size_label))
+        s2.bind('<Return>', lambda e: update_size_label(self.x1_var, self.y1_var, self.x2_var, self.y2_var, self.size_label))
         s2.bind('<FocusOut>', lambda e: update_size_label(self.x1_var, self.y1_var, self.x2_var, self.y2_var, self.size_label))
 
     def create_tooltip(self, widget, text):
         """创建鼠标悬浮提示"""
         def enter(event):
+            # 如果已经存在tooltip，先销毁
+            if hasattr(widget, '_tooltip'):
+                try:
+                    widget._tooltip.destroy()
+                except:
+                    pass
+                del widget._tooltip
+            
             tooltip = tk.Toplevel()
             tooltip.wm_overrideredirect(True)
             tooltip.wm_attributes("-topmost", True)
@@ -378,28 +380,44 @@ class CropDialog:
                             borderwidth=1, font=("tahoma", "8", "normal"))
             label.pack()
 
-            #              x = event.x_root + 10
+            # 计算提示框位置
+            x = event.x_root + 10
             y = event.y_root + 10
             tooltip.wm_geometry(f"+{x}+{y}")
 
-            #  tooltipwidget，            widget._tooltip = tooltip
+            # 保存tooltip引用，避免被垃圾回收
+            widget._tooltip = tooltip
 
         def leave(event):
             if hasattr(widget, '_tooltip'):
-                widget._tooltip.destroy()
+                try:
+                    widget._tooltip.destroy()
+                except:
+                    pass
                 del widget._tooltip
 
         widget.bind("<Enter>", enter)
         widget.bind("<Leave>", leave)
+        
+        # 确保窗口关闭时销毁tooltip
+        def on_window_close():
+            if hasattr(widget, '_tooltip'):
+                try:
+                    widget._tooltip.destroy()
+                except:
+                    pass
+                del widget._tooltip
+        
+        self.dialog.bind("<Destroy>", on_window_close)
 
     def reset_zoom(self):
-        """重置缩放 - 按原尺寸大小显示图片"""
+        """原始大小 - 按图片原始尺寸显示图片"""
         if not hasattr(self, 'original_image'):
             messagebox.showinfo("提示", "请先加载图片")
             return
 
         try:
-            # 重置缩放比例为1.0
+            # 重置缩放比例为1.0（原始尺寸）
             self.preview_scale = 1.0
 
             self.display_image()
@@ -625,12 +643,12 @@ class CropDialog:
                 new_x1, new_y1, new_x2, new_y2, self.original_image.width, self.original_image.height
             )
 
-            #              self.x1_var.set(str(new_x1))
+            self.x1_var.set(str(new_x1))
             self.y1_var.set(str(new_y1))
             self.x2_var.set(str(new_x2))
             self.y2_var.set(str(new_y2))
 
-            #              self.draw_selection_box()
+            self.draw_selection_box()
             from function.ui_operations import update_size_label
             update_size_label(self.x1_var, self.y1_var, self.x2_var, self.y2_var, self.size_label)
 
@@ -678,12 +696,12 @@ class CropDialog:
                 x1, y1, x2, y2, self.original_image.width, self.original_image.height
             )
 
-            #              self.x1_var.set(str(x1))
+            self.x1_var.set(str(x1))
             self.y1_var.set(str(y1))
             self.x2_var.set(str(x2))
             self.y2_var.set(str(y2))
 
-            #              self.draw_selection_box()
+            self.draw_selection_box()
             from function.ui_operations import update_size_label
             update_size_label(self.x1_var, self.y1_var, self.x2_var, self.y2_var, self.size_label)
 
@@ -730,7 +748,7 @@ class CropDialog:
                     orig_x1, orig_y1, orig_x2, orig_y2, self.original_image.width, self.original_image.height
                 )
 
-                #                  self.x1_var.set(str(orig_x1))
+                self.x1_var.set(str(orig_x1))
                 self.y1_var.set(str(orig_y1))
                 self.x2_var.set(str(orig_x2))
                 self.y2_var.set(str(orig_y2))
@@ -781,7 +799,7 @@ class CropDialog:
             if self.base_photo:
                 self.canvas.create_image(self.image_x, self.image_y, image=self.base_photo, anchor=tk.CENTER)
 
-            #              if self.show_cropped_var.get():
+            if self.show_cropped_var.get():
                 #   image_utils 
                 cropped_img = crop_image(self.original_image, x1, y1, x2, y2)
                 mask = Image.new('RGBA', (orig_width, orig_height), (0, 0, 0, 180))
@@ -796,15 +814,15 @@ class CropDialog:
                 self.canvas.delete("all")
                 self.canvas.create_image(self.image_x, self.image_y, image=self.current_photo, anchor=tk.CENTER)
 
-            #              elif self.show_prev_var.get() and self.image_paths and self.current_index > 0:
+            elif self.show_prev_var.get() and self.image_paths and self.current_index > 0:
                 prev_path = self.image_paths[self.current_index - 1]
                 self.ratio_handler.display_reference_image(self, prev_path)
 
-            #              elif self.show_next_var.get() and self.image_paths and self.current_index < len(self.image_paths) - 1:
+            elif self.show_next_var.get() and self.image_paths and self.current_index < len(self.image_paths) - 1:
                 next_path = self.image_paths[self.current_index + 1]
                 self.ratio_handler.display_reference_image(self, next_path)
 
-            #              elif self.show_first_var.get() and self.image_paths:
+            elif self.show_first_var.get() and self.image_paths:
                 first_path = self.image_paths[0]
                 self.ratio_handler.display_reference_image(self, first_path)
 
@@ -836,7 +854,7 @@ class CropDialog:
             scaled_x2 = img_left + x2 * self.preview_scale
             scaled_y2 = img_top + y2 * self.preview_scale
 
-            #              self.canvas.delete("selection_box")
+            self.canvas.delete("selection_box")
             self.canvas.delete("handle")
 
 

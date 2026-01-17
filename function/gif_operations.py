@@ -8,7 +8,7 @@ from PIL import Image
 import os
 
 
-def save_gif(frames, output_path, duration=100):
+def save_gif(frames, output_path, duration=100, loop=0):
     """
     保存GIF文件
 
@@ -16,6 +16,7 @@ def save_gif(frames, output_path, duration=100):
         frames: 图像帧列表
         output_path: 输出文件路径
         duration: 每帧持续时间（毫秒）
+        loop: 循环次数（0表示无限循环）
     """
     if not output_path:
         raise ValueError("请先设置输出文件路径")
@@ -27,7 +28,7 @@ def save_gif(frames, output_path, duration=100):
             save_all=True,
             append_images=frames[1:],
             duration=duration,
-            loop=0,
+            loop=loop,
             optimize=True
         )
         return True

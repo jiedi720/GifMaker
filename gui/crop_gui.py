@@ -19,7 +19,7 @@ from function.image_utils import (
     calculate_scale_to_fit,
     calculate_scale_to_fill
 )
-from function.crop import CropState, CropRatioHandler, find_smallest_image_path, calculate_scaled_dimensions, convert_canvas_to_image_coords, validate_crop_coordinates, calculate_aspect_ratio, apply_aspect_ratio_constraints, determine_crop_strategy
+from function.crop import CropState, CropRatioHandler, find_smallest_image_path, calculate_scaled_dimensions, convert_canvas_to_image_coords, validate_crop_coordinates, calculate_aspect_ratio, apply_aspect_ratio_constraints, determine_crop_strategy, crop_image
 from function.ui_operations import ensure_widget_rendered
 
 class CropDialog:
@@ -47,6 +47,7 @@ class CropDialog:
         self.drag_start_coords = None
 
         self.ratio_handler = CropRatioHandler()
+        self.ratio_handler.dialog = self
 
         self.is_moving_selection = False
         self.move_start_pos = None
@@ -230,7 +231,7 @@ class CropDialog:
         self.modules_container.grid(row=0, column=0, sticky="n")
         
         # 2.1 坐标设置
-        coord_title = "" + ("（基准图）" if self.is_base_image else "")
+        coord_title = "坐标设置" + ("（基准图）" if self.is_base_image else "")
         coord_group = ttk.LabelFrame(self.modules_container, text=coord_title, padding=5)
         coord_group.pack(fill="x", pady=(0, 15), ipadx=10)
         
@@ -251,7 +252,9 @@ class CropDialog:
         size_frame = ttk.Frame(coord_group)
         size_frame.grid(row=4, column=0, columnspan=4, sticky="w", pady=(10, 0), padx=5)
         self.size_label = ttk.Label(size_frame, text="尺寸: 100 x 100 像素", font=("Microsoft YaHei UI", 9))
-        self.size_label.pack(anchor="w")
+        self.size_label.pack(side="left", anchor="w")
+        self.locked_ratio_label = ttk.Label(size_frame, text="", foreground="blue", font=("Microsoft YaHei UI", 9))
+        self.locked_ratio_label.pack(side="left", padx=(10, 0))
 
         # 2.2 比例设置
         ratio_group = ttk.LabelFrame(self.modules_container, text="比例设置", padding=5)
@@ -277,6 +280,7 @@ class CropDialog:
         ratios = [
             ("自由", "free"),
             ("锁定比例", "lock_current"),
+            ("原始比例", "original"),
             ("1:1", "1:1"),
             ("16:9", "16:9"),
             ("4:3", "4:3"),
@@ -288,18 +292,8 @@ class CropDialog:
         for i, (text, value) in enumerate(ratios):
             row = i // 2
             col = i % 2
-            
-            if value == "lock_current":
-
-                rb_frame = ttk.Frame(ratio_group)
-                rb_frame.grid(row=row, column=col, sticky="w", padx=5, pady=2)
-                rb = ttk.Radiobutton(rb_frame, text=text, variable=self.ratio_var, value=value)
-                rb.pack(side="left")
-                self.locked_ratio_label = ttk.Label(rb_frame, text="", foreground="blue")
-                self.locked_ratio_label.pack(side="left", padx=(10, 0))
-            else:
-                rb = ttk.Radiobutton(ratio_group, text=text, variable=self.ratio_var, value=value)
-                rb.grid(row=row, column=col, sticky="w", padx=5, pady=2)
+            rb = ttk.Radiobutton(ratio_group, text=text, variable=self.ratio_var, value=value)
+            rb.grid(row=row, column=col, sticky="w", padx=5, pady=2)
 
         # 2.3 选项设置
         option_group = ttk.LabelFrame(self.modules_container, text="选项", padding=5)
@@ -312,10 +306,10 @@ class CropDialog:
         self.show_first_var = tk.BooleanVar()
 
         opts = [
-            ("显示裁剪后状(Show As Cropped)", self.show_cropped_var),
-            ("显示上一(Show Previous)", self.show_prev_var),
-            ("显示下一(Show Next)", self.show_next_var),
-            ("显示第一(Show First)", self.show_first_var)
+            ("显示裁剪后", self.show_cropped_var),
+            ("显示上一帧", self.show_prev_var),
+            ("显示下一帧", self.show_next_var),
+            ("显示第一帧", self.show_first_var)
         ]
         
         for i, (text, var) in enumerate(opts):
@@ -400,14 +394,14 @@ class CropDialog:
         widget.bind("<Leave>", leave)
         
         # 确保窗口关闭时销毁tooltip
-        def on_window_close():
+        def on_window_close(event):
             if hasattr(widget, '_tooltip'):
                 try:
                     widget._tooltip.destroy()
                 except:
                     pass
                 del widget._tooltip
-        
+
         self.dialog.bind("<Destroy>", on_window_close)
 
     def reset_zoom(self):

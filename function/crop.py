@@ -33,6 +33,17 @@ class CropRatioHandler:
             self.is_ratio_locked = False
             self.ratio_value = None
             return False, None, (x1, y1, x2, y2)
+        elif ratio_type == "original":
+            # 原始比例：使用图片的原始宽高比
+            if self.dialog and hasattr(self.dialog, 'original_image'):
+                orig_width, orig_height = self.dialog.original_image.size
+                if orig_height > 0:
+                    original_ratio = orig_width / orig_height
+                    self.is_ratio_locked = True
+                    self.ratio_value = original_ratio
+                    new_coords = self._apply_ratio_lock(x1, y1, x2, y2, original_ratio)
+                    return True, original_ratio, new_coords
+            return False, None, (x1, y1, x2, y2)
         elif ratio_type == "lock_current":
             width = abs(x2 - x1)
             height = abs(y2 - y1)
@@ -80,15 +91,62 @@ class CropRatioHandler:
         if width == 0 or height == 0:
             return (x1, y1, x2, y2)
 
-        new_height = int(width / ratio)
+        # 获取图片尺寸（如果有dialog实例）
+        img_width, img_height = 0, 0
+        if self.dialog and hasattr(self.dialog, 'original_image'):
+            img_width, img_height = self.dialog.original_image.size
 
-        #  Y
-        if y2 > y1:
-            new_y2 = y1 + new_height
+        # 根据当前选框和比例计算新的尺寸
+        if img_width > 0 and img_height > 0:
+            # 使用图片尺寸计算最大可能的选框
+            if ratio >= 1:
+                # 宽大于高，以宽度为基准
+                new_width = min(width, img_width)
+                new_height = int(new_width / ratio)
+                # 如果高度超出，以高度为基准
+                if new_height > img_height:
+                    new_height = img_height
+                    new_width = int(new_height * ratio)
+            else:
+                # 高大于宽，以高度为基准
+                new_height = min(height, img_height)
+                new_width = int(new_height * ratio)
+                # 如果宽度超出，以宽度为基准
+                if new_width > img_width:
+                    new_width = img_width
+                    new_height = int(new_width / ratio)
+
+            # 保持选框中心点不变
+            center_x = (x1 + x2) // 2
+            center_y = (y1 + y2) // 2
+
+            new_x1 = max(0, center_x - new_width // 2)
+            new_y1 = max(0, center_y - new_height // 2)
+            new_x2 = min(img_width, new_x1 + new_width)
+            new_y2 = min(img_height, new_y1 + new_height)
+
+            # 如果右边界超出，调整左边界
+            if new_x2 > img_width:
+                new_x2 = img_width
+                new_x1 = max(0, new_x2 - new_width)
+
+            # 如果下边界超出，调整上边界
+            if new_y2 > img_height:
+                new_y2 = img_height
+                new_y1 = max(0, new_y2 - new_height)
+
+            return (new_x1, new_y1, new_x2, new_y2)
         else:
-            new_y2 = y1 - new_height
+            # 没有图片尺寸信息，简单调整高度
+            new_height = int(width / ratio)
 
-        return (x1, y1, x2, new_y2)
+            # 调整Y
+            if y2 > y1:
+                new_y2 = y1 + new_height
+            else:
+                new_y2 = y1 - new_height
+
+            return (x1, y1, x2, new_y2)
 
     def adjust_coords_by_ratio(self, x1: int, y1: int, x2: int, y2: int, drag_handle: str = None) -> Tuple[int, int, int, int]:
         """根据锁定的比例调整坐标
@@ -109,23 +167,106 @@ class CropRatioHandler:
         if width == 0 or height == 0:
             return (x1, y1, x2, y2)
 
-        if drag_handle in ['nw', 'ne', 'sw', 'se']:
+        # 获取图片尺寸
+        img_width, img_height = 0, 0
+        if self.dialog and hasattr(self.dialog, 'original_image'):
+            img_width, img_height = self.dialog.original_image.size
 
+        if drag_handle in ['nw', 'ne', 'sw', 'se']:
+            # 角点拖拽：根据宽度调整高度
             new_height = int(width / self.ratio_value)
             if drag_handle in ['nw', 'sw']:
                 y1 = y2 - new_height
             else:
                 y2 = y1 + new_height
-        elif drag_handle in ['n', 's']:
 
+            # 检查边界，如果超出则停止调整
+            if img_width > 0 and img_height > 0:
+                # 确保坐标在图片边界内
+                if y1 < 0:
+                    y1 = 0
+                    # 重新计算宽度以保持比例
+                    new_width = int((y2 - y1) * self.ratio_value)
+                    if drag_handle in ['nw', 'sw']:
+                        x1 = x2 - new_width
+                    else:
+                        x2 = x1 + new_width
+                elif y2 > img_height:
+                    y2 = img_height
+                    # 重新计算宽度以保持比例
+                    new_width = int((y2 - y1) * self.ratio_value)
+                    if drag_handle in ['nw', 'sw']:
+                        x1 = x2 - new_width
+                    else:
+                        x2 = x1 + new_width
+
+                # 检查 x 坐标边界
+                if x1 < 0:
+                    x1 = 0
+                    new_height = int((x2 - x1) / self.ratio_value)
+                    if drag_handle in ['nw', 'sw']:
+                        y1 = y2 - new_height
+                    else:
+                        y2 = y1 + new_height
+                elif x2 > img_width:
+                    x2 = img_width
+                    new_height = int((x2 - x1) / self.ratio_value)
+                    if drag_handle in ['nw', 'sw']:
+                        y1 = y2 - new_height
+                    else:
+                        y2 = y1 + new_height
+
+        elif drag_handle in ['n', 's']:
+            # 上下边拖拽：根据高度调整宽度
             new_width = int(height * self.ratio_value)
             x2 = x1 + new_width
-        elif drag_handle in ['e', 'w']:
 
+            # 检查边界，如果超出则停止调整
+            if img_width > 0 and img_height > 0:
+                if x2 > img_width:
+                    x2 = img_width
+                    # 重新计算高度以保持比例
+                    new_height = int((x2 - x1) / self.ratio_value)
+                    if drag_handle == 'n':
+                        y1 = y2 - new_height
+                    else:
+                        y2 = y1 + new_height
+                elif x1 < 0:
+                    x1 = 0
+                    # 重新计算高度以保持比例
+                    new_width = img_width - x1
+                    new_height = int(new_width / self.ratio_value)
+                    if drag_handle == 'n':
+                        y1 = y2 - new_height
+                    else:
+                        y2 = y1 + new_height
+
+        elif drag_handle in ['e', 'w']:
+            # 左右边拖拽：根据宽度调整高度
             new_height = int(width / self.ratio_value)
             y2 = y1 + new_height
 
-        #  （、1）
+            # 检查边界，如果超出则停止调整
+            if img_width > 0 and img_height > 0:
+                if y2 > img_height:
+                    y2 = img_height
+                    # 重新计算宽度以保持比例
+                    new_width = int((y2 - y1) * self.ratio_value)
+                    if drag_handle == 'w':
+                        x1 = x2 - new_width
+                    else:
+                        x2 = x1 + new_width
+                elif y1 < 0:
+                    y1 = 0
+                    # 重新计算宽度以保持比例
+                    new_height = img_height - y1
+                    new_width = int(new_height * self.ratio_value)
+                    if drag_handle == 'w':
+                        x1 = x2 - new_width
+                    else:
+                        x2 = x1 + new_width
+
+        # 确保最小尺寸（避免宽度或高度为0）
         if abs(x2 - x1) < 1:
             if drag_handle in ['nw', 'w', 'sw']:
                 x1 = x2 - 1
@@ -151,12 +292,8 @@ class CropRatioHandler:
 
     def is_valid_ratio(self, ratio_type: str) -> bool:
         """检查比例类型是否有效"""
-        valid_ratios = ["free", "lock_current", "1:1", "16:9", "4:3", "3:2", "1.618"]
+        valid_ratios = ["free", "lock_current", "original", "1:1", "16:9", "4:3", "3:2", "1.618"]
         return ratio_type in valid_ratios
-
-    def auto_crop(self, original_image, x1_var, y1_var, x2_var, y2_var, draw_selection_box_func):
-        """自动裁剪功能 - 自动检测图片内容并去除空白边缘"""
-        messagebox.showerror("错误", "自动裁剪功能已被移除")
 
     def fit_to_window(self, dialog_instance):
         """适应窗口 - 让图片适应窗口大小"""

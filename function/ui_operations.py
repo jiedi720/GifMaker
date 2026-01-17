@@ -158,25 +158,38 @@ def enter_crop_mode(main_window_instance):
         )
 
         if result:
+            from function.image_utils import load_image
+            from function.crop import crop_image
+
             if result.get('is_base_image', False):
 
                 crop_coords = result.get('crop_coords', {})
-                
-                #   pending_crop_coords
+
+                # 保存裁剪坐标和裁剪后的图片
                 for img_path, coords in crop_coords.items():
                     if img_path in main_window_instance.image_paths:
                         main_window_instance.pending_crop_coords[img_path] = coords
-                        main_window_instance.pending_crops.add(img_path)
+                        # 加载图片并应用裁剪
+                        img = load_image(img_path)
+                        if img:
+                            x1, y1, x2, y2 = coords
+                            cropped_img = crop_image(img, x1, y1, x2, y2)
+                            main_window_instance.pending_crops[img_path] = cropped_img
             else:
 
                 start_pos = result['start']
                 end_pos = result['end']
                 current_img_path = current_image_path
-                
+
                 main_window_instance.pending_crop_coords[current_img_path] = (
                     start_pos[0], start_pos[1], end_pos[0], end_pos[1]
                 )
-                main_window_instance.pending_crops.add(current_img_path)
+                # 加载图片并应用裁剪
+                img = load_image(current_img_path)
+                if img:
+                    x1, y1, x2, y2 = start_pos[0], start_pos[1], end_pos[0], end_pos[1]
+                    cropped_img = crop_image(img, x1, y1, x2, y2)
+                    main_window_instance.pending_crops[current_img_path] = cropped_img
 
             # 更新图片列表
             main_window_instance.display_grid_preview()

@@ -5,7 +5,9 @@ GUI界面构建器模块
 """
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox, filedialog
+from PIL import Image, ImageTk
+import os
 
 
 class GUIBuilder:
@@ -304,3 +306,925 @@ class GUIBuilder:
             Tkinter组件对象，如果不存在则返回None
         """
         return self.widgets.get(name)
+
+
+class CropDialog:
+    """裁剪对话框类，用于在主窗口中显示裁剪界面"""
+    
+    def __init__(self, root, image_path, image_paths, current_index):
+        """
+        初始化裁剪对话框
+        
+        Args:
+            root: 父窗口
+            image_path: 当前图片路径
+            image_paths: 所有图片路径列表
+            current_index: 当前图片索引
+        """
+        self.root = root
+        self.image_path = image_path
+        self.image_paths = image_paths
+        self.current_index = current_index
+        self.result = None  # 存储裁剪结果
+        
+        # 创建对话框窗口
+        self.dialog = tk.Toplevel(root)
+        self.dialog.title("图片裁剪")
+        self.dialog.geometry("1280x720")
+        self.dialog.minsize(800, 600)
+        
+        # 模态对话框
+        self.dialog.transient(root)
+        self.dialog.grab_set()
+        
+        # 图像相关变量
+        self.original_image = None
+        self.display_image = None
+        self.photo_image = None
+        self.scale_factor = 1.0
+        self.image_offset_x = 0
+        self.image_offset_y = 0
+        
+        # 裁剪框相关变量
+        self.start_x = 0
+        self.start_y = 0
+        self.current_rect = None
+        self.selection_coords = None
+        self.is_dragging = False
+        self.drag_offset_x = 0
+        self.drag_offset_y = 0
+        self.is_moving_rect = False
+        
+        # 控制点相关变量
+        self.handles = {}
+        self.dragging_handle = None
+        self.drag_start_pos = None
+        self.drag_start_coords = None
+        self.handle_size = 8
+        
+        # 设置固定比例字典
+        self.aspect_ratios = {
+            "free": None,
+            "lock": None,
+            "original": None,
+            "1:1": 1.0,
+            "16:9": 16/9,
+            "4:3": 4/3,
+            "3:2": 3/2,
+            "2:3": 2/3
+        }
+        self.current_ratio = None
+        self.locked_ratio = None
+        self.original_ratio = None
+        
+        # 创建GUI界面
+        self.setup_gui()
+        
+        # 加载图片
+        self.load_image(image_path)
+        
+        # 等待对话框关闭
+        self.dialog.wait_window()
+    
+    def setup_gui(self):
+        """设置GUI界面"""
+        # 定义回调函数
+        callbacks = {
+            'open_image': self.open_image,
+            'on_ratio_change': self.on_ratio_change_wrapper,
+            'confirm_crop': self.confirm_crop,
+            'save_cropped_image': self.save_cropped_image,
+            'on_mouse_down': self.on_mouse_down,
+            'on_mouse_drag': self.on_mouse_drag,
+            'on_mouse_up': self.on_mouse_up,
+            'on_mouse_move': self.on_mouse_move,
+            'fit_to_window': self.fit_to_window,
+            'original_size': self.original_size
+        }
+        
+        # 创建GUI构建器
+        self.gui = GUIBuilder(self.dialog, callbacks)
+    
+    def load_image(self, image_path):
+        """加载图片文件"""
+        try:
+            # 加载原始图像
+            self.original_image = Image.open(image_path)
+            
+            # 计算缩放比例以适应画布
+            self.calculate_scale_and_display()
+            
+            # 启用裁剪按钮
+            self.gui.get_widget('crop_btn').config(state=tk.NORMAL)
+            self.gui.get_widget('save_btn').config(state=tk.DISABLED)
+            
+            # 清除之前的选择框
+            self.clear_selection()
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"无法加载图片：{str(e)}")
+    
+    def calculate_scale_and_display(self):
+        """计算缩放比例并在画布上显示图像"""
+        if not self.original_image:
+            return
+        
+        # 获取画布
+        canvas = self.gui.get_widget('canvas')
+        
+        # 获取画布尺寸
+        canvas_width = canvas.winfo_width()
+        canvas_height = canvas.winfo_height()
+        
+        # 如果画布还未显示，使用默认值
+        if canvas_width <= 1:
+            canvas_width = 800
+        if canvas_height <= 1:
+            canvas_height = 600
+        
+        # 获取原始图像尺寸
+        img_width, img_height = self.original_image.size
+        
+        # 计算缩放比例（保持宽高比）
+        scale_x = (canvas_width - 40) / img_width
+        scale_y = (canvas_height - 40) / img_height
+        self.scale_factor = min(scale_x, scale_y)
+        
+        # 计算显示尺寸
+        display_width = int(img_width * self.scale_factor)
+        display_height = int(img_height * self.scale_factor)
+        
+        # 缩放图像
+        self.display_image = self.original_image.resize(
+            (display_width, display_height),
+            Image.Resampling.LANCZOS
+        )
+        
+        # 转换为 Tkinter 图像对象
+        self.photo_image = ImageTk.PhotoImage(self.display_image)
+        
+        # 计算居中位置
+        self.image_offset_x = (canvas_width - display_width) // 2
+        self.image_offset_y = (canvas_height - display_height) // 2
+        
+        # 设置滚动区域
+        canvas.configure(scrollregion=(0, 0, canvas_width, canvas_height))
+        
+        # 在画布上显示图像
+        canvas.delete("all")
+        canvas.create_image(
+            self.image_offset_x, 
+            self.image_offset_y,
+            image=self.photo_image, 
+            anchor=tk.NW,
+            tags="image"
+        )
+        
+        # 绘制图片边框
+        border_padding = 1
+        canvas.create_rectangle(
+            self.image_offset_x - border_padding, 
+            self.image_offset_y - border_padding,
+            self.image_offset_x + display_width + border_padding, 
+            self.image_offset_y + display_height + border_padding,
+            outline="#CCCCCC",
+            width=2,
+            tags="image_border"
+        )
+        
+        # 更新坐标显示
+        self.update_coordinate_display(img_width, img_height)
+    
+    def update_coordinate_display(self, img_width, img_height):
+        """更新坐标显示"""
+        x1_var = self.gui.get_widget('x1_var')
+        y1_var = self.gui.get_widget('y1_var')
+        x2_var = self.gui.get_widget('x2_var')
+        y2_var = self.gui.get_widget('y2_var')
+        
+        if x1_var:
+            x1_var.set("0")
+            y1_var.set("0")
+            x2_var.set(str(img_width))
+            y2_var.set(str(img_height))
+        
+        self.update_size_label()
+    
+    def update_size_label(self):
+        """更新尺寸标签显示"""
+        if not self.selection_coords:
+            return
+        
+        x1, y1, x2, y2 = self.selection_coords
+        
+        # 确保坐标顺序正确
+        if x1 > x2:
+            x1, x2 = x2, x1
+        if y1 > y2:
+            y1, y2 = y2, y1
+        
+        # 转换为图像坐标
+        img_x1 = int((x1 - self.image_offset_x) / self.scale_factor)
+        img_y1 = int((y1 - self.image_offset_y) / self.scale_factor)
+        img_x2 = int((x2 - self.image_offset_x) / self.scale_factor)
+        img_y2 = int((y2 - self.image_offset_y) / self.scale_factor)
+        
+        width = img_x2 - img_x1
+        height = img_y2 - img_y1
+        
+        # 更新尺寸标签
+        size_label = self.gui.get_widget('size_label')
+        if size_label:
+            size_label.config(text=f"尺寸: {width} x {height} 像素")
+        
+        # 更新比例显示
+        self.update_ratio_display()
+        
+        # 更新坐标输入框
+        x1_var = self.gui.get_widget('x1_var')
+        y1_var = self.gui.get_widget('y1_var')
+        x2_var = self.gui.get_widget('x2_var')
+        y2_var = self.gui.get_widget('y2_var')
+        
+        if x1_var and y1_var and x2_var and y2_var:
+            x1_var.set(str(max(0, img_x1)))
+            y1_var.set(str(max(0, img_y1)))
+            x2_var.set(str(max(0, img_x2)))
+            y2_var.set(str(max(0, img_y2)))
+    
+    def update_ratio_display(self):
+        """更新当前比例显示"""
+        if not self.selection_coords:
+            return
+        
+        x1, y1, x2, y2 = self.selection_coords
+        
+        # 确保坐标顺序正确
+        if x1 > x2:
+            x1, x2 = x2, x1
+        if y1 > y2:
+            y1, y2 = y2, y1
+        
+        # 转换为图像坐标
+        img_x1 = int((x1 - self.image_offset_x) / self.scale_factor)
+        img_y1 = int((y1 - self.image_offset_y) / self.scale_factor)
+        img_x2 = int((x2 - self.image_offset_x) / self.scale_factor)
+        img_y2 = int((y2 - self.image_offset_y) / self.scale_factor)
+        
+        width = img_x2 - img_x1
+        height = img_y2 - img_y1
+        
+        # 计算当前比例
+        if height > 0:
+            current_ratio = width / height
+            # 格式化比例显示
+            if current_ratio >= 1:
+                ratio_text = f"{current_ratio:.2f}:1"
+            else:
+                ratio_text = f"1:{1/current_ratio:.2f}"
+        else:
+            ratio_text = "N/A"
+        
+        # 更新比例标签
+        ratio_label = self.gui.get_widget('ratio_label')
+        if ratio_label:
+            ratio_label.config(text=ratio_text)
+    
+    def open_image(self):
+        """打开图片文件"""
+        file_path = filedialog.askopenfilename(
+            title="选择图片",
+            filetypes=[
+                ("图片文件", "*.jpg *.jpeg *.png *.bmp *.gif *.tiff"),
+                ("所有文件", "*.*")
+            ]
+        )
+        
+        if not file_path:
+            return
+        
+        self.load_image(file_path)
+    
+    def on_ratio_change_wrapper(self, value):
+        """比例选择改变的包装函数"""
+        if value == "lock":
+            if self.selection_coords:
+                x1, y1, x2, y2 = self.selection_coords
+                # 转换为原始图像坐标
+                img_x1 = (x1 - self.image_offset_x) / self.scale_factor
+                img_y1 = (y1 - self.image_offset_y) / self.scale_factor
+                img_x2 = (x2 - self.image_offset_x) / self.scale_factor
+                img_y2 = (y2 - self.image_offset_y) / self.scale_factor
+                
+                width = abs(img_x2 - img_x1)
+                height = abs(img_y2 - img_y1)
+                if height > 0:
+                    self.locked_ratio = width / height
+                    self.current_ratio = self.locked_ratio
+                else:
+                    self.locked_ratio = None
+                    self.current_ratio = None
+            else:
+                self.locked_ratio = None
+                self.current_ratio = None
+        elif value == "original":
+            if self.original_image:
+                img_width, img_height = self.original_image.size
+                self.original_ratio = img_width / img_height
+                self.current_ratio = self.original_ratio
+            else:
+                self.original_ratio = None
+                self.current_ratio = None
+        else:
+            self.current_ratio = self.aspect_ratios.get(value)
+        
+        self.update_ratio_display()
+        
+        if self.current_rect:
+            self.clear_selection()
+    
+    def fit_to_window(self):
+        """适应窗口"""
+        if not self.original_image:
+            return
+        self.scale_factor = None
+        self.calculate_scale_and_display()
+    
+    def original_size(self):
+        """原始大小"""
+        if not self.original_image:
+            return
+        
+        canvas = self.gui.get_widget('canvas')
+        canvas_width = canvas.winfo_width()
+        canvas_height = canvas.winfo_height()
+        
+        if canvas_width <= 1:
+            canvas_width = 800
+        if canvas_height <= 1:
+            canvas_height = 600
+        
+        img_width, img_height = self.original_image.size
+        self.scale_factor = 1.0
+        
+        display_width = img_width
+        display_height = img_height
+        
+        self.display_image = self.original_image
+        self.photo_image = ImageTk.PhotoImage(self.display_image)
+        
+        self.image_offset_x = 0
+        self.image_offset_y = 0
+        
+        border_padding = 1
+        canvas.configure(scrollregion=(0, 0, display_width + border_padding * 2, display_height + border_padding * 2))
+        
+        canvas.delete("all")
+        canvas.create_image(
+            self.image_offset_x, 
+            self.image_offset_y,
+            image=self.photo_image, 
+            anchor=tk.NW,
+            tags="image"
+        )
+        
+        canvas.create_rectangle(
+            self.image_offset_x - border_padding, 
+            self.image_offset_y - border_padding,
+            self.image_offset_x + display_width + border_padding, 
+            self.image_offset_y + display_height + border_padding,
+            outline="#CCCCCC",
+            width=2,
+            tags="image_border"
+        )
+        
+        self.update_coordinate_display(img_width, img_height)
+    
+    def on_mouse_down(self, event):
+        """鼠标按下事件"""
+        if not self.original_image:
+            return
+        
+        handle = self.get_handle_at_position(event.x, event.y)
+        if handle:
+            self.dragging_handle = handle
+            self.drag_start_pos = (event.x, event.y)
+            self.drag_start_coords = self.selection_coords
+            return
+        
+        if self.selection_coords and self.is_point_in_rect(event.x, event.y, self.selection_coords):
+            self.is_moving_rect = True
+            self.drag_offset_x = event.x
+            self.drag_offset_y = event.y
+            return
+        
+        self.start_x = event.x
+        self.start_y = event.y
+        self.is_moving_rect = False
+        self.clear_selection()
+    
+    def on_mouse_drag(self, event):
+        """鼠标拖动事件"""
+        if not self.original_image:
+            return
+        
+        if self.dragging_handle:
+            self.handle_drag(event)
+        elif self.is_moving_rect and self.selection_coords:
+            self.move_selection_box(event.x, event.y)
+        else:
+            self.create_selection_box(event.x, event.y)
+    
+    def on_mouse_up(self, event):
+        """鼠标释放事件"""
+        if not self.original_image or not self.selection_coords:
+            return
+        
+        self.is_moving_rect = False
+        self.dragging_handle = None
+        self.drag_start_pos = None
+        self.drag_start_coords = None
+        
+        self.gui.get_widget('crop_btn').config(state=tk.NORMAL)
+    
+    def on_mouse_move(self, event):
+        """鼠标移动事件"""
+        if not self.original_image:
+            return
+        
+        canvas = self.gui.get_widget('canvas')
+        
+        handle = self.get_handle_at_position(event.x, event.y)
+        if handle:
+            cursor_map = {
+                'nw': 'size_nw_se',
+                'n': 'sb_v_double_arrow',
+                'ne': 'size_ne_sw',
+                'e': 'sb_h_double_arrow',
+                'se': 'size_nw_se',
+                's': 'sb_v_double_arrow',
+                'sw': 'size_ne_sw',
+                'w': 'sb_h_double_arrow'
+            }
+            canvas.config(cursor=cursor_map.get(handle, 'cross'))
+        elif self.selection_coords and self.is_point_in_rect(event.x, event.y, self.selection_coords):
+            canvas.config(cursor="fleur")
+        else:
+            canvas.config(cursor="cross")
+    
+    def create_selection_box(self, current_x, current_y):
+        """创建新的裁剪框"""
+        canvas = self.gui.get_widget('canvas')
+        
+        width = current_x - self.start_x
+        height = current_y - self.start_y
+        
+        if self.current_ratio is not None:
+            width, height = self.adjust_to_aspect_ratio(width, height)
+        
+        x1 = self.start_x
+        y1 = self.start_y
+        x2 = self.start_x + width
+        y2 = self.start_y + height
+        
+        if self.current_rect:
+            canvas.delete(self.current_rect)
+        self.clear_handles()
+        
+        self.current_rect = canvas.create_rectangle(
+            x1, y1, x2, y2,
+            outline="red",
+            width=2,
+            dash=(5, 5),
+            tags="selection"
+        )
+        
+        self.selection_coords = (x1, y1, x2, y2)
+        self.draw_handles(x1, y1, x2, y2)
+        self.update_size_label()
+    
+    def move_selection_box(self, current_x, current_y):
+        """移动现有的裁剪框"""
+        canvas = self.gui.get_widget('canvas')
+        
+        if not self.selection_coords:
+            return
+        
+        dx = current_x - self.drag_offset_x
+        dy = current_y - self.drag_offset_y
+        
+        x1, y1, x2, y2 = self.selection_coords
+        
+        if x1 > x2:
+            x1, x2 = x2, x1
+        if y1 > y2:
+            y1, y2 = y2, y1
+        
+        new_x1 = x1 + dx
+        new_y1 = y1 + dy
+        new_x2 = x2 + dx
+        new_y2 = y2 + dy
+        
+        new_x1, new_y1, new_x2, new_y2 = self.clamp_to_image_bounds(
+            new_x1, new_y1, new_x2, new_y2
+        )
+        
+        actual_dx = (new_x1 - x1)
+        actual_dy = (new_y1 - y1)
+        
+        if self.current_rect:
+            canvas.delete(self.current_rect)
+        self.clear_handles()
+        
+        self.current_rect = canvas.create_rectangle(
+            new_x1, new_y1, new_x2, new_y2,
+            outline="red",
+            width=2,
+            dash=(5, 5),
+            tags="selection"
+        )
+        
+        self.selection_coords = (new_x1, new_y1, new_x2, new_y2)
+        self.draw_handles(new_x1, new_y1, new_x2, new_y2)
+        
+        self.drag_offset_x = self.drag_offset_x + actual_dx
+        self.drag_offset_y = self.drag_offset_y + actual_dy
+        
+        self.update_size_label()
+    
+    def adjust_to_aspect_ratio(self, width, height):
+        """根据固定比例调整宽度和高度"""
+        if self.current_ratio is None or self.current_ratio == 0:
+            return width, height
+        
+        if abs(width) < 1:
+            width = 1
+        if abs(height) < 1:
+            height = 1
+        
+        if abs(width) >= abs(height):
+            adjusted_height = width / self.current_ratio
+            return width, adjusted_height
+        else:
+            adjusted_width = height * self.current_ratio
+            return adjusted_width, height
+    
+    def clamp_to_image_bounds(self, x1, y1, x2, y2):
+        """限制裁剪框在图像显示范围内"""
+        if not self.display_image:
+            return x1, y1, x2, y2
+        
+        img_left = self.image_offset_x
+        img_top = self.image_offset_y
+        img_right = self.image_offset_x + self.display_image.width
+        img_bottom = self.image_offset_y + self.display_image.height
+        
+        if x1 > x2:
+            x1, x2 = x2, x1
+        if y1 > y2:
+            y1, y2 = y2, y1
+        
+        rect_width = x2 - x1
+        rect_height = y2 - y1
+        
+        if self.current_ratio is not None:
+            return self.clamp_with_aspect_ratio(x1, y1, rect_width, rect_height, 
+                                               img_left, img_top, img_right, img_bottom)
+        else:
+            new_x1 = max(img_left, min(x1, img_right - rect_width))
+            new_y1 = max(img_top, min(y1, img_bottom - rect_height))
+            new_x2 = new_x1 + rect_width
+            new_y2 = new_y1 + rect_height
+            return new_x1, new_y1, new_x2, new_y2
+    
+    def clamp_with_aspect_ratio(self, x1, y1, width, height, img_left, img_top, img_right, img_bottom):
+        """固定比例下的滑动边界检测"""
+        x2 = x1 + width
+        y2 = y1 + height
+        
+        if x1 < img_left:
+            x1 = img_left
+            x2 = x1 + width
+        
+        if x2 > img_right:
+            x2 = img_right
+            x1 = x2 - width
+        
+        if y1 < img_top:
+            y1 = img_top
+            y2 = y1 + height
+        
+        if y2 > img_bottom:
+            y2 = img_bottom
+            y1 = y2 - height
+        
+        max_width = img_right - img_left
+        max_height = img_bottom - img_top
+        
+        if max_width / max_height > self.current_ratio:
+            limited_height = max_height
+            limited_width = limited_height * self.current_ratio
+        else:
+            limited_width = max_width
+            limited_height = limited_width / self.current_ratio
+        
+        if width > limited_width or height > limited_height:
+            width = limited_width
+            height = limited_height
+            if x1 + width > img_right:
+                x1 = img_right - width
+            if y1 + height > img_bottom:
+                y1 = img_bottom - height
+            x2 = x1 + width
+            y2 = y1 + height
+        
+        return x1, y1, x2, y2
+    
+    def is_point_in_rect(self, px, py, rect_coords):
+        """判断点是否在矩形内"""
+        x1, y1, x2, y2 = rect_coords
+        left = min(x1, x2)
+        right = max(x1, x2)
+        top = min(y1, y2)
+        bottom = max(y1, y2)
+        
+        return left <= px <= right and top <= py <= bottom
+    
+    def handle_drag(self, event):
+        """控制点拖拽事件"""
+        if not self.dragging_handle or not self.drag_start_coords:
+            return
+        
+        canvas = self.gui.get_widget('canvas')
+        
+        dx = event.x - self.drag_start_pos[0]
+        dy = event.y - self.drag_start_pos[1]
+        
+        x1, y1, x2, y2 = self.drag_start_coords
+        
+        if x1 > x2:
+            x1, x2 = x2, x1
+        if y1 > y2:
+            y1, y2 = y2, y1
+        
+        if self.dragging_handle == 'nw':
+            x1 = x1 + dx
+            y1 = y1 + dy
+        elif self.dragging_handle == 'n':
+            y1 = y1 + dy
+        elif self.dragging_handle == 'ne':
+            x2 = x2 + dx
+            y1 = y1 + dy
+        elif self.dragging_handle == 'e':
+            x2 = x2 + dx
+        elif self.dragging_handle == 'se':
+            x2 = x2 + dx
+            y2 = y2 + dy
+        elif self.dragging_handle == 's':
+            y2 = y2 + dy
+        elif self.dragging_handle == 'sw':
+            x1 = x1 + dx
+            y2 = y2 + dy
+        elif self.dragging_handle == 'w':
+            x1 = x1 + dx
+        
+        if self.current_ratio is not None:
+            x1, y1, x2, y2 = self.adjust_coords_with_ratio(x1, y1, x2, y2, self.dragging_handle)
+        
+        x1, y1, x2, y2 = self.clamp_to_image_bounds(x1, y1, x2, y2)
+        
+        min_size = 10
+        if abs(x2 - x1) < min_size or abs(y2 - y1) < min_size:
+            return
+        
+        if self.current_rect:
+            canvas.delete(self.current_rect)
+        self.clear_handles()
+        
+        self.current_rect = canvas.create_rectangle(
+            x1, y1, x2, y2,
+            outline="red",
+            width=2,
+            dash=(5, 5),
+            tags="selection"
+        )
+        
+        self.selection_coords = (x1, y1, x2, y2)
+        self.draw_handles(x1, y1, x2, y2)
+        self.update_size_label()
+    
+    def adjust_coords_with_ratio(self, x1, y1, x2, y2, handle):
+        """根据固定比例调整坐标"""
+        if self.current_ratio is None or self.current_ratio == 0:
+            return x1, y1, x2, y2
+        
+        if x1 > x2:
+            x1, x2 = x2, x1
+        if y1 > y2:
+            y1, y2 = y2, y1
+        
+        width = x2 - x1
+        height = y2 - y1
+        
+        if height <= 0 or width <= 0:
+            return x1, y1, x2, y2
+        
+        if handle in ['nw', 'ne', 'sw', 'se']:
+            current_ratio = width / height
+            
+            if width / height > self.current_ratio:
+                new_height = width / self.current_ratio
+                if handle in ['nw', 'sw']:
+                    y2 = y1 + new_height
+                else:
+                    y1 = y2 - new_height
+            else:
+                new_width = height * self.current_ratio
+                if handle in ['nw', 'ne']:
+                    x2 = x1 + new_width
+                else:
+                    x1 = x2 - new_width
+        elif handle in ['n', 's']:
+            new_width = height * self.current_ratio
+            if handle == 'n':
+                x2 = x1 + new_width
+            else:
+                x2 = x1 + new_width
+        elif handle in ['e', 'w']:
+            new_height = width / self.current_ratio
+            if handle == 'w':
+                y2 = y1 + new_height
+            else:
+                y2 = y1 + new_height
+        
+        return x1, y1, x2, y2
+    
+    def clear_selection(self):
+        """清除选择框"""
+        canvas = self.gui.get_widget('canvas')
+        if self.current_rect:
+            canvas.delete(self.current_rect)
+            self.current_rect = None
+        self.clear_handles()
+        self.selection_coords = None
+    
+    def draw_handles(self, x1, y1, x2, y2):
+        """绘制裁剪框的控制点"""
+        canvas = self.gui.get_widget('canvas')
+        
+        if x1 > x2:
+            x1, x2 = x2, x1
+        if y1 > y2:
+            y1, y2 = y2, y1
+        
+        cx = (x1 + x2) / 2
+        cy = (y1 + y2) / 2
+        
+        handle_positions = {
+            'nw': (x1, y1),
+            'n': (cx, y1),
+            'ne': (x2, y1),
+            'e': (x2, cy),
+            'se': (x2, y2),
+            's': (cx, y2),
+            'sw': (x1, y2),
+            'w': (x1, cy)
+        }
+        
+        for handle_name, (hx, hy) in handle_positions.items():
+            half_size = self.handle_size / 2
+            handle = canvas.create_rectangle(
+                hx - half_size, hy - half_size,
+                hx + half_size, hy + half_size,
+                fill="white",
+                outline="red",
+                width=2,
+                tags=("handle", handle_name)
+            )
+            self.handles[handle_name] = handle
+    
+    def clear_handles(self):
+        """清除所有控制点"""
+        canvas = self.gui.get_widget('canvas')
+        for handle in self.handles.values():
+            canvas.delete(handle)
+        self.handles.clear()
+    
+    def get_handle_at_position(self, x, y):
+        """检查指定位置是否有控制点"""
+        canvas = self.gui.get_widget('canvas')
+        items = canvas.find_overlapping(
+            x - self.handle_size, y - self.handle_size,
+            x + self.handle_size, y + self.handle_size
+        )
+        
+        for item in items:
+            tags = canvas.gettags(item)
+            if "handle" in tags:
+                for tag in tags:
+                    if tag in self.handles:
+                        return tag
+        return None
+    
+    def confirm_crop(self):
+        """确认裁剪"""
+        if not self.original_image or not self.selection_coords:
+            messagebox.showwarning("警告", "请先在图像上选择裁剪区域")
+            return
+        
+        try:
+            x1, y1, x2, y2 = self.selection_coords
+            
+            img_x1 = (x1 - self.image_offset_x) / self.scale_factor
+            img_y1 = (y1 - self.image_offset_y) / self.scale_factor
+            img_x2 = (x2 - self.image_offset_x) / self.scale_factor
+            img_y2 = (y2 - self.image_offset_y) / self.scale_factor
+            
+            img_x1, img_x2 = min(img_x1, img_x2), max(img_x1, img_x2)
+            img_y1, img_y2 = min(img_y1, img_y2), max(img_y1, img_y2)
+            
+            orig_width, orig_height = self.original_image.size
+            img_x1 = max(0, min(img_x1, orig_width))
+            img_y1 = max(0, min(img_y1, orig_height))
+            img_x2 = max(0, min(img_x2, orig_width))
+            img_y2 = max(0, min(img_y2, orig_height))
+            
+            # 保存裁剪结果
+            self.result = {
+                'start': (int(img_x1), int(img_y1)),
+                'end': (int(img_x2), int(img_y2)),
+                'is_base_image': False
+            }
+            
+            # 关闭对话框
+            self.dialog.destroy()
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"裁剪失败：{str(e)}")
+    
+    def save_cropped_image(self):
+        """保存裁剪后的图像"""
+        if not self.original_image or not self.selection_coords:
+            messagebox.showwarning("警告", "请先执行裁剪操作")
+            return
+        
+        try:
+            x1, y1, x2, y2 = self.selection_coords
+            
+            img_x1 = (x1 - self.image_offset_x) / self.scale_factor
+            img_y1 = (y1 - self.image_offset_y) / self.scale_factor
+            img_x2 = (x2 - self.image_offset_x) / self.scale_factor
+            img_y2 = (y2 - self.image_offset_y) / self.scale_factor
+            
+            img_x1, img_x2 = min(img_x1, img_x2), max(img_x1, img_x2)
+            img_y1, img_y2 = min(img_y1, img_y2), max(img_y1, img_y2)
+            
+            cropped_image = self.original_image.crop((img_x1, img_y1, img_x2, img_y2))
+            
+            file_path = filedialog.asksaveasfilename(
+                title="保存裁剪图像",
+                defaultextension=".png",
+                filetypes=[
+                    ("PNG 图片", "*.png"),
+                    ("JPEG 图片", "*.jpg"),
+                    ("BMP 图片", "*.bmp"),
+                    ("所有文件", "*.*")
+                ]
+            )
+            
+            if not file_path:
+                return
+            
+            file_ext = os.path.splitext(file_path)[1].lower()
+            
+            if file_ext in ['.jpg', '.jpeg']:
+                if cropped_image.mode == 'RGBA':
+                    cropped_rgb = Image.new('RGB', cropped_image.size, (255, 255, 255))
+                    cropped_rgb.paste(cropped_image, mask=cropped_image.split()[3])
+                    cropped_rgb.save(file_path, 'JPEG', quality=95)
+                else:
+                    cropped_image.save(file_path, 'JPEG', quality=95)
+            else:
+                cropped_image.save(file_path)
+            
+            messagebox.showinfo("成功", f"图像已保存到：\n{file_path}")
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"保存失败：{str(e)}")
+
+
+def show_crop_dialog(root, image_path, image_paths, current_index):
+    """
+    显示裁剪对话框
+    
+    Args:
+        root: 父窗口
+        image_path: 当前图片路径
+        image_paths: 所有图片路径列表
+        current_index: 当前图片索引
+    
+    Returns:
+        裁剪结果字典，包含裁剪坐标信息；如果用户取消则返回None
+    """
+    dialog = CropDialog(root, image_path, image_paths, current_index)
+    return dialog.result

@@ -110,16 +110,13 @@ class GUIBuilder:
         self.widgets['modules_container'] = ttk.Frame(self.widgets['right_panel'], width=320)
         self.widgets['modules_container'].grid(row=0, column=0, sticky="n")
         
-        # 1. 文件操作
-        self.create_file_operations()
-        
-        # 2. 坐标设置
+        # 1. 坐标设置
         self.create_coordinate_settings()
         
-        # 3. 比例设置
+        # 2. 比例设置
         self.create_ratio_settings()
         
-        # 4. 操作按钮
+        # 3. 操作按钮
         self.create_action_buttons()
     
     def create_file_operations(self):
@@ -386,12 +383,12 @@ class CropDialog:
         # 创建GUI界面
         self.setup_gui()
         
-        # 加载图片
-        self.load_image(image_path)
-        
         # 显示窗口（所有组件初始化完成后）
         self.dialog.deiconify()
         self.dialog.update_idletasks()
+        
+        # 加载图片（在窗口显示后，确保画布尺寸正确）
+        self.load_image(image_path)
         
         # 等待对话框关闭
         self.dialog.wait_window()
@@ -417,7 +414,6 @@ class CropDialog:
         """设置GUI界面"""
         # 定义回调函数
         callbacks = {
-            'open_image': self.open_image,
             'on_ratio_change': self.on_ratio_change_wrapper,
             'confirm_crop': self.confirm_crop,
             'save_cropped_image': self.save_cropped_image,
@@ -438,21 +434,23 @@ class CropDialog:
             # 加载原始图像
             self.original_image = Image.open(image_path)
             
-            # 计算缩放比例以适应画布
-            self.calculate_scale_and_display()
-            
-            # 启用裁剪按钮
-            self.gui.get_widget('crop_btn').config(state=tk.NORMAL)
-            self.gui.get_widget('save_btn').config(state=tk.DISABLED)
-            
-            # 清除之前的选择框
-            self.clear_selection()
-            
-            # 在窗口显示后重新计算适应窗口（确保画布尺寸正确）
-            self.dialog.after(100, self.fit_to_window)
+            # 延迟加载图片，确保画布尺寸正确
+            self.dialog.after(50, self._load_image_delayed)
             
         except Exception as e:
             messagebox.showerror("错误", f"无法加载图片：{str(e)}")
+    
+    def _load_image_delayed(self):
+        """延迟加载图片的内部方法"""
+        # 计算缩放比例以适应画布
+        self.calculate_scale_and_display()
+        
+        # 启用裁剪按钮
+        self.gui.get_widget('crop_btn').config(state=tk.NORMAL)
+        self.gui.get_widget('save_btn').config(state=tk.DISABLED)
+        
+        # 清除之前的选择框
+        self.clear_selection()
     
     def calculate_scale_and_display(self):
         """计算缩放比例并在画布上显示图像"""

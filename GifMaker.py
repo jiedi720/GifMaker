@@ -125,3 +125,4 @@ if __name__ == '__main__':
     else:
         from gui.main_window import run
         run()
+        

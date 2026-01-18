@@ -41,8 +41,8 @@ class CropRatioHandler:
                     original_ratio = orig_width / orig_height
                     self.is_ratio_locked = True
                     self.ratio_value = original_ratio
-                    new_coords = self._apply_ratio_lock(x1, y1, x2, y2, original_ratio)
-                    return True, original_ratio, new_coords
+                    # ❌ 不再修改坐标，比例只在拖拽时生效
+                    return True, original_ratio, (x1, y1, x2, y2)
             return False, None, (x1, y1, x2, y2)
         elif ratio_type == "lock_current":
             width = abs(x2 - x1)
@@ -58,95 +58,34 @@ class CropRatioHandler:
         elif ratio_type == "1:1":
             self.is_ratio_locked = True
             self.ratio_value = 1.0
-            new_coords = self._apply_ratio_lock(x1, y1, x2, y2, 1.0)
-            return True, 1.0, new_coords
+            # ❌ 不再修改坐标，比例只在拖拽时生效
+            return True, 1.0, (x1, y1, x2, y2)
         elif ratio_type == "16:9":
             self.is_ratio_locked = True
             self.ratio_value = 16.0 / 9.0
-            new_coords = self._apply_ratio_lock(x1, y1, x2, y2, 16.0 / 9.0)
-            return True, 16.0 / 9.0, new_coords
+            # ❌ 不再修改坐标，比例只在拖拽时生效
+            return True, 16.0 / 9.0, (x1, y1, x2, y2)
         elif ratio_type == "4:3":
             self.is_ratio_locked = True
             self.ratio_value = 4.0 / 3.0
-            new_coords = self._apply_ratio_lock(x1, y1, x2, y2, 4.0 / 3.0)
-            return True, 4.0 / 3.0, new_coords
+            # ❌ 不再修改坐标，比例只在拖拽时生效
+            return True, 4.0 / 3.0, (x1, y1, x2, y2)
         elif ratio_type == "3:2":
             self.is_ratio_locked = True
             self.ratio_value = 3.0 / 2.0
-            new_coords = self._apply_ratio_lock(x1, y1, x2, y2, 3.0 / 2.0)
-            return True, 3.0 / 2.0, new_coords
+            # ❌ 不再修改坐标，比例只在拖拽时生效
+            return True, 3.0 / 2.0, (x1, y1, x2, y2)
         elif ratio_type == "1.618":
             self.is_ratio_locked = True
             self.ratio_value = 1.618
-            new_coords = self._apply_ratio_lock(x1, y1, x2, y2, 1.618)
-            return True, 1.618, new_coords
+            # ❌ 不再修改坐标，比例只在拖拽时生效
+            return True, 1.618, (x1, y1, x2, y2)
 
         return False, None, (x1, y1, x2, y2)
 
     def _apply_ratio_lock(self, x1: int, y1: int, x2: int, y2: int, ratio: float) -> Tuple[int, int, int, int]:
-        """应用比例锁定，调整选框以符合指定比例"""
-        width = abs(x2 - x1)
-        height = abs(y2 - y1)
-
-        if width == 0 or height == 0:
-            return (x1, y1, x2, y2)
-
-        # 获取图片尺寸（如果有dialog实例）
-        img_width, img_height = 0, 0
-        if self.dialog and hasattr(self.dialog, 'original_image'):
-            img_width, img_height = self.dialog.original_image.size
-
-        # 根据当前选框和比例计算新的尺寸
-        if img_width > 0 and img_height > 0:
-            # 使用图片尺寸计算最大可能的选框
-            if ratio >= 1:
-                # 宽大于高，以宽度为基准
-                new_width = min(width, img_width)
-                new_height = int(new_width / ratio)
-                # 如果高度超出，以高度为基准
-                if new_height > img_height:
-                    new_height = img_height
-                    new_width = int(new_height * ratio)
-            else:
-                # 高大于宽，以高度为基准
-                new_height = min(height, img_height)
-                new_width = int(new_height * ratio)
-                # 如果宽度超出，以宽度为基准
-                if new_width > img_width:
-                    new_width = img_width
-                    new_height = int(new_width / ratio)
-
-            # 保持选框中心点不变
-            center_x = (x1 + x2) // 2
-            center_y = (y1 + y2) // 2
-
-            new_x1 = max(0, center_x - new_width // 2)
-            new_y1 = max(0, center_y - new_height // 2)
-            new_x2 = min(img_width, new_x1 + new_width)
-            new_y2 = min(img_height, new_y1 + new_height)
-
-            # 如果右边界超出，调整左边界
-            if new_x2 > img_width:
-                new_x2 = img_width
-                new_x1 = max(0, new_x2 - new_width)
-
-            # 如果下边界超出，调整上边界
-            if new_y2 > img_height:
-                new_y2 = img_height
-                new_y1 = max(0, new_y2 - new_height)
-
-            return (new_x1, new_y1, new_x2, new_y2)
-        else:
-            # 没有图片尺寸信息，简单调整高度
-            new_height = int(width / ratio)
-
-            # 调整Y
-            if y2 > y1:
-                new_y2 = y1 + new_height
-            else:
-                new_y2 = y1 - new_height
-
-            return (x1, y1, x2, new_y2)
+        # ❌ 已废弃：比例由 adjust_coords_by_ratio 统一处理
+        return x1, y1, x2, y2
 
     def adjust_coords_by_ratio(
         self,
@@ -154,14 +93,12 @@ class CropRatioHandler:
         drag_handle: str = None
     ) -> Tuple[int, int, int, int]:
         """
-        严格比例锁定（工程稳定版）
-        规则：
-        - 单一锚点
-        - 单一驱动轴
-        - 单一 clamp
+        严格比例锁定（统一逻辑）
+        - 1 套逻辑处理：边缘拖拽 + 角点拖拽
+        - 1 个 clamp：保证不超出图片边界
         """
 
-        # ---------- 0. 基础校验 ----------
+        # 0. 基础校验
         if not self.is_ratio_locked or not self.ratio_value or not drag_handle:
             return x1, y1, x2, y2
 
@@ -171,61 +108,53 @@ class CropRatioHandler:
         img_w, img_h = self.dialog.original_image.size
         ratio = float(self.ratio_value)
 
-        # ---------- 1. 统一坐标方向 ----------
+        # 1. 统一坐标方向
         left   = min(x1, x2)
         right  = max(x1, x2)
         top    = min(y1, y2)
         bottom = max(y1, y2)
 
-        # ---------- 2. 确定唯一锚点 ----------
+        # 2. 确定锚点（固定不动）与方向
         if drag_handle == "e":
             ax, ay = left, top
-            dir_x, dir_y = +1, +1
+            dx, dy = +1, +1
             drive = "x"
-
         elif drag_handle == "w":
             ax, ay = right, top
-            dir_x, dir_y = -1, +1
+            dx, dy = -1, +1
             drive = "x"
-
         elif drag_handle == "s":
             ax, ay = left, top
-            dir_x, dir_y = +1, +1
+            dx, dy = +1, +1
             drive = "y"
-
         elif drag_handle == "n":
             ax, ay = left, bottom
-            dir_x, dir_y = +1, -1
+            dx, dy = +1, -1
             drive = "y"
-
         elif drag_handle == "se":
             ax, ay = left, top
-            dir_x, dir_y = +1, +1
+            dx, dy = +1, +1
             drive = "corner"
-
         elif drag_handle == "sw":
             ax, ay = right, top
-            dir_x, dir_y = -1, +1
+            dx, dy = -1, +1
             drive = "corner"
-
         elif drag_handle == "ne":
             ax, ay = left, bottom
-            dir_x, dir_y = +1, -1
+            dx, dy = +1, -1
             drive = "corner"
-
         elif drag_handle == "nw":
             ax, ay = right, bottom
-            dir_x, dir_y = -1, -1
+            dx, dy = -1, -1
             drive = "corner"
-
         else:
             return x1, y1, x2, y2
 
-        # ---------- 3. 最大可用空间 ----------
-        max_w = img_w - ax if dir_x > 0 else ax
-        max_h = img_h - ay if dir_y > 0 else ay
+        # 3. 最大可用空间（以锚点为起点）
+        max_w = img_w - ax if dx > 0 else ax
+        max_h = img_h - ay if dy > 0 else ay
 
-        # ---------- 4. 用户期望尺寸 ----------
+        # 4. 用户期望尺寸（驱动轴决定）
         raw_w = abs(right - left)
         raw_h = abs(bottom - top)
 
@@ -234,33 +163,25 @@ class CropRatioHandler:
         elif drive == "y":
             desired_w = raw_h * ratio
         else:
-            # corner：选择变化更大的轴
-            if raw_w >= raw_h * ratio:
-                desired_w = raw_w
-            else:
-                desired_w = raw_h * ratio
+            # corner：用最小约束（保证比例并且尽可能贴近用户动作）
+            desired_w = min(raw_w, raw_h * ratio)
 
-        # ---------- 5. 比例闭环 clamp（唯一关键点） ----------
+        # 5. clamp（保证不超出图片边界）
         max_legal_w = min(max_w, max_h * ratio)
         final_w = max(1, min(desired_w, max_legal_w))
         final_h = final_w / ratio
 
-        # ---------- 6. 从锚点生成新框 ----------
+        # 6. 从锚点生成新框
         nx1 = ax
         ny1 = ay
-        nx2 = ax + dir_x * final_w
-        ny2 = ay + dir_y * final_h
+        nx2 = ax + dx * final_w
+        ny2 = ay + dy * final_h
 
-        # ---------- 7. 归一化 & 取整 ----------
+        # 7. 归一化
         nx1, nx2 = sorted((nx1, nx2))
         ny1, ny2 = sorted((ny1, ny2))
 
-        return (
-            int(round(nx1)),
-            int(round(ny1)),
-            int(round(nx2)),
-            int(round(ny2)),
-        )
+        return int(round(nx1)), int(round(ny1)), int(round(nx2)), int(round(ny2))
 
     def get_current_ratio(self, x1: int, y1: int, x2: int, y2: int) -> float:
         """获取当前选框的比例"""
@@ -317,58 +238,73 @@ class CropRatioHandler:
         except Exception as e:
             messagebox.showerror("错误", f"适应窗口失败: {str(e)}")
 
-    def apply_ratio_lock(self, x1_var, y1_var, x2_var, y2_var, ratio_handler, draw_selection_box_func, update_size_label_func):
-        """应用比例锁定，调整选框以符合指定比例"""
-        try:
-            x1 = int(x1_var.get())
-            y1 = int(y1_var.get())
-            x2 = int(x2_var.get())
-            y2 = int(y2_var.get())
-
-
-            new_x1, new_y1, new_x2, new_y2 = apply_aspect_ratio_constraints(
-                x1, y1, x2, y2, ratio_handler.ratio_value, "lock_current"
-            )
-
-            x1_var.set(str(new_x1))
-            y1_var.set(str(new_y1))
-            x2_var.set(str(new_x2))
-            y2_var.set(str(new_y2))
-
-            draw_selection_box_func()
-            update_size_label_func()
-
-        except Exception as e:
-            print(f"应用比例锁定失败: {e}")
+    def apply_ratio_lock(self, *args, **kwargs):
+        # ❌ 已废弃，禁止 UI 层修改比例
+        return
 
     def on_ratio_change(self, ratio_var, x1_var, y1_var, x2_var, y2_var, ratio_handler, locked_ratio_label, draw_selection_box_func, update_size_label_func):
         """比例选择变化时的回调"""
         ratio = ratio_var.get()
 
         try:
+            # 获取当前裁剪框的实际坐标
             x1 = int(x1_var.get())
             y1 = int(y1_var.get())
             x2 = int(x2_var.get())
             y2 = int(y2_var.get())
 
-            is_locked, ratio_value, new_coords = ratio_handler.lock_ratio(ratio, x1, y1, x2, y2)
+            # 调用 lock_ratio 设置状态
+            ratio_handler.lock_ratio(ratio, x1, y1, x2, y2)
 
-            #  UI
+            # 更新 UI 显示的比例值
             if locked_ratio_label:
-                if ratio_value is not None:
-                    locked_ratio_label.config(text=f"({ratio_value:.3f})")
-                    locked_ratio_label.update_idletasks()  # 确保立即更新
+                if ratio_handler.is_ratio_locked and ratio_handler.ratio_value:
+                    locked_ratio_label.config(text=f"({ratio_handler.ratio_value:.3f})")
+                    locked_ratio_label.update_idletasks()
                 else:
                     locked_ratio_label.config(text="")
-                    locked_ratio_label.update_idletasks()  # 确保立即更新
+                    locked_ratio_label.update_idletasks()
 
+            # 如果是预设比例（非 lock_current 和 free），立即调整裁剪框
+            if ratio_handler.is_ratio_locked and ratio_handler.ratio_value and ratio not in ["free", "lock_current"]:
+                # 获取当前裁剪框的中心点和尺寸
+                center_x = (x1 + x2) / 2
+                center_y = (y1 + y2) / 2
+                current_width = abs(x2 - x1)
+                current_height = abs(y2 - y1)
+                target_ratio = ratio_handler.ratio_value
 
-            if is_locked and ratio_value and ratio != "lock_current":
-                x1, y1, x2, y2 = new_coords
-                x1_var.set(str(x1))
-                y1_var.set(str(y1))
-                x2_var.set(str(x2))
-                y2_var.set(str(y2))
+                # 根据当前宽度或高度计算新的尺寸（保持较大的那个）
+                if current_width >= current_height * target_ratio:
+                    # 以宽度为基准
+                    new_width = current_width
+                    new_height = new_width / target_ratio
+                else:
+                    # 以高度为基准
+                    new_height = current_height
+                    new_width = new_height * target_ratio
+
+                # 从中心点计算新的坐标
+                new_x1 = max(0, center_x - new_width / 2)
+                new_y1 = max(0, center_y - new_height / 2)
+                new_x2 = min(ratio_handler.dialog.original_image.width, center_x + new_width / 2)
+                new_y2 = min(ratio_handler.dialog.original_image.height, center_y + new_height / 2)
+
+                # 如果边界超出，调整中心点
+                if new_x2 > ratio_handler.dialog.original_image.width:
+                    new_x2 = ratio_handler.dialog.original_image.width
+                    new_x1 = max(0, new_x2 - new_width)
+                if new_y2 > ratio_handler.dialog.original_image.height:
+                    new_y2 = ratio_handler.dialog.original_image.height
+                    new_y1 = max(0, new_y2 - new_height)
+
+                # 更新裁剪框坐标
+                x1_var.set(str(int(round(new_x1))))
+                y1_var.set(str(int(round(new_y1))))
+                x2_var.set(str(int(round(new_x2))))
+                y2_var.set(str(int(round(new_y2))))
+
+                # 重绘选框
                 draw_selection_box_func()
                 update_size_label_func()
 
@@ -594,7 +530,7 @@ def validate_crop_coordinates(x1, y1, x2, y2, img_width, img_height, is_ratio_lo
     if y1 > y2:
         y1, y2 = y2, y1
 
-    # 仅在未启用比例锁定时进行最小尺寸补位，避免破坏比例
+    #  （、1）
     if not is_ratio_locked:
         if x2 - x1 < 1:
             x2 = x1 + 1
@@ -612,119 +548,65 @@ def calculate_aspect_ratio(width, height):
         return 0.0
 
 
-def apply_aspect_ratio_constraints(x1, y1, x2, y2, aspect_ratio, constraint_type="lock_current"):
-    """应用宽高比约束"""
-    if constraint_type == "free" or aspect_ratio is None:
-        return x1, y1, x2, y2
-
-    width = abs(x2 - x1)
-    height = abs(y2 - y1)
-
-    if width == 0 or height == 0:
-        return x1, y1, x2, y2
-
-    if constraint_type in ['nw', 'ne', 'sw', 'se']:
-
-        new_height = int(width / aspect_ratio)
-        if constraint_type in ['nw', 'sw']:
-            y1 = y2 - new_height
-        else:
-            y2 = y1 + new_height
-    elif constraint_type in ['n', 's']:
-
-        new_width = int(height * aspect_ratio)
-        x2 = x1 + new_width
-    elif constraint_type in ['e', 'w']:
-
-        new_height = int(width / aspect_ratio)
-        y2 = y1 + new_height
-
-    if abs(x2 - x1) < 1:
-        if constraint_type in ['nw', 'w', 'sw']:
-            x1 = x2 - 1
-        else:
-            x2 = x1 + 1
-    if abs(y2 - y1) < 1:
-        if constraint_type in ['nw', 'n', 'ne']:
-            y1 = y2 - 1
-        else:
-            y2 = y1 + 1
-
-    return x1, y1, x2, y2
+# 已废弃：apply_aspect_ratio_constraints 函数
+# 所有比例逻辑现在统一由 CropRatioHandler.adjust_coords_by_ratio() 处理
 
 
 def determine_crop_strategy(image_paths: List[str], current_index: int) -> Tuple[bool, str, int]:
     """确定裁剪策略
 
-    Args:
-        image_paths: 图片路径列表
-        current_index: 当前图片索引
-
     Returns:
-        tuple: (is_base_image, current_image_path, current_index)
+        tuple: (should_crop_all, strategy_type, target_index)
     """
     if not image_paths:
-        return False, '', -1
+        return False, "none", 0
 
-    is_base_image = False
-    current_image_path = ''
+    if len(image_paths) == 1:
+        return False, "single", 0
 
-    if len(image_paths) > 1:
+    # 检查所有图片尺寸是否一致
+    first_img = Image.open(image_paths[0])
+    first_size = first_img.size
 
-        min_size = float('inf')
-        min_path = image_paths[0]
-        min_index = 0
+    all_same_size = True
+    for path in image_paths[1:]:
+        img = Image.open(path)
+        if img.size != first_size:
+            all_same_size = False
+            break
 
-        for i, path in enumerate(image_paths):
-            try:
-                from PIL import Image
-                img = Image.open(path)
-                width, height = img.size
-                size = width * height
-                if size < min_size:
-                    min_size = size
-                    min_path = path
-                    min_index = i
-            except Exception as e:
-                print(f"无法读取图片尺寸 {path}: {e}")
-                continue
-
-        current_image_path = min_path
-        current_index = min_index
-
-
-        if image_paths[current_index] != min_path:
-            is_base_image = True
+    if all_same_size:
+        return True, "all_same", 0
     else:
+        # 找到最小尺寸的图片
+        min_path, min_index = find_smallest_image_path(image_paths)
+        return True, "use_smallest", min_index
 
-        current_image_path = image_paths[current_index] if 0 <= current_index < len(image_paths) else image_paths[0] if image_paths else ''
 
-    return is_base_image, current_image_path, current_index
-
-
-def crop_image(image, x1, y1, x2, y2):
-    """
-    裁剪图片
+def crop_image(image: Image.Image, x1: int, y1: int, x2: int, y2: int) -> Image.Image:
+    """裁剪图片
 
     Args:
-        image: PIL.Image对象
-        x1: 左上角x坐标
-        y1: 左上角y坐标
-        x2: 右下角x坐标
-        y2: 右下角y坐标
+        image: PIL.Image 对象
+        x1, y1, x2, y2: 裁剪坐标
 
     Returns:
-        裁剪后的PIL.Image对象
+        PIL.Image: 裁剪后的图片
     """
-    x1 = max(0, min(x1, image.width))
-    y1 = max(0, min(y1, image.height))
-    x2 = max(x1, min(x2, image.width))
-    y2 = max(y1, min(y2, image.height))
+    # 确保坐标顺序正确
+    x1 = min(x1, x2)
+    y1 = min(y1, y2)
+    x2 = max(x1, x2)
+    y2 = max(y1, y2)
+
+    # 确保坐标在图片范围内
+    x1 = max(0, x1)
+    y1 = max(0, y1)
+    x2 = min(image.width, x2)
+    y2 = min(image.height, y2)
 
     return image.crop((x1, y1, x2, y2))
 
 
-# 向后兼容别名
+# 别名，保持向后兼容
 CropRatioController = CropRatioHandler
-
-

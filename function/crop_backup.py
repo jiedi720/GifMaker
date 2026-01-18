@@ -14,10 +14,10 @@ from .history_manager import HistoryManager
 class CropRatioHandler:
     """裁剪比例处理器"""
 
-    def __init__(self, dialog=None):
+    def __init__(self):
         self.is_ratio_locked = False
         self.ratio_value = None
-        self.dialog = dialog  # Reference to CropDialog instance
+        self.dialog = None  # Reference to CropDialog instance
 
     def lock_ratio(self, ratio_type: str, x1: int, y1: int, x2: int, y2: int) -> Tuple[bool, float, Tuple[int, int, int, int]]:
         """锁定比例
@@ -148,20 +148,8 @@ class CropRatioHandler:
 
             return (x1, y1, x2, new_y2)
 
-    def adjust_coords_by_ratio(
-        self,
-        x1: int, y1: int, x2: int, y2: int,
-        drag_handle: str = None
-    ) -> Tuple[int, int, int, int]:
-        """
-        严格比例锁定（工程稳定版）
-        规则：
-        - 单一锚点
-        - 单一驱动轴
-        - 单一 clamp
-        """
-
-        # ---------- 0. 基础校验 ----------
+    def adjust_coords_by_ratio(self, x1: int, y1: int, x2: int, y2: int, drag_handle: str = None) -> Tuple[int, int, int, int]:
+        """严格比例锁定（闭环逻辑版）"""
         if not self.is_ratio_locked or not self.ratio_value or not drag_handle:
             return x1, y1, x2, y2
 
@@ -171,96 +159,70 @@ class CropRatioHandler:
         img_w, img_h = self.dialog.original_image.size
         ratio = float(self.ratio_value)
 
-        # ---------- 1. 统一坐标方向 ----------
-        left   = min(x1, x2)
-        right  = max(x1, x2)
-        top    = min(y1, y2)
-        bottom = max(y1, y2)
+        # 1. 确立唯一锚点 (Anchor)
+        # 无论鼠标怎么动，锚点是绝对不动的
+        if 'e' in drag_handle: anchor_x = x1
+        elif 'w' in drag_handle: anchor_x = x2
+        else: anchor_x = x1 # n, s 模式下 x1 不动
 
-        # ---------- 2. 确定唯一锚点 ----------
-        if drag_handle == "e":
-            ax, ay = left, top
-            dir_x, dir_y = +1, +1
-            drive = "x"
+        if 's' in drag_handle: anchor_y = y1
+        elif 'n' in drag_handle: anchor_y = y2
+        else: anchor_y = y1 # e, w 模式下 y1 不动
 
-        elif drag_handle == "w":
-            ax, ay = right, top
-            dir_x, dir_y = -1, +1
-            drive = "x"
+        # 2. 计算四个方向的物理极限
+        dist_to_left = anchor_x
+        dist_to_right = img_w - anchor_x
+        dist_to_top = anchor_y
+        dist_to_bottom = img_h - anchor_y
 
-        elif drag_handle == "s":
-            ax, ay = left, top
-            dir_x, dir_y = +1, +1
-            drive = "y"
+        # 根据拖拽方向确定可用空间
+        can_use_w = dist_to_right if 'e' in drag_handle else dist_to_left if 'w' in drag_handle else img_w
+        can_use_h = dist_to_bottom if 's' in drag_handle else dist_to_top if 'n' in drag_handle else img_h
 
-        elif drag_handle == "n":
-            ax, ay = left, bottom
-            dir_x, dir_y = +1, -1
-            drive = "y"
+        # 3. 计算在该比例下的"最大可行宽度"
+        # 重点：这是此方向下，比例框能达到的绝对物理极限
+        max_legal_w = min(can_use_w, can_use_h * ratio)
 
-        elif drag_handle == "se":
-            ax, ay = left, top
-            dir_x, dir_y = +1, +1
-            drive = "corner"
+        # 4. 确定期望宽度 (Desired Width)
+        raw_w = abs(x2 - x1)
+        raw_h = abs(y2 - y1)
 
-        elif drag_handle == "sw":
-            ax, ay = right, top
-            dir_x, dir_y = -1, +1
-            drive = "corner"
-
-        elif drag_handle == "ne":
-            ax, ay = left, bottom
-            dir_x, dir_y = +1, -1
-            drive = "corner"
-
-        elif drag_handle == "nw":
-            ax, ay = right, bottom
-            dir_x, dir_y = -1, -1
-            drive = "corner"
-
-        else:
-            return x1, y1, x2, y2
-
-        # ---------- 3. 最大可用空间 ----------
-        max_w = img_w - ax if dir_x > 0 else ax
-        max_h = img_h - ay if dir_y > 0 else ay
-
-        # ---------- 4. 用户期望尺寸 ----------
-        raw_w = abs(right - left)
-        raw_h = abs(bottom - top)
-
-        if drive == "x":
+        if drag_handle in ("e", "w"):
             desired_w = raw_w
-        elif drive == "y":
+        elif drag_handle in ("n", "s"):
             desired_w = raw_h * ratio
         else:
-            # corner：选择变化更大的轴
+            # 角拖拽：选择鼠标移动最远的方向作为驱动轴，增加平滑度
+            # 解决"拉不动"或者"比例乱跳"的问题
             if raw_w >= raw_h * ratio:
                 desired_w = raw_w
             else:
                 desired_w = raw_h * ratio
 
-        # ---------- 5. 比例闭环 clamp（唯一关键点） ----------
-        max_legal_w = min(max_w, max_h * ratio)
-        final_w = max(1, min(desired_w, max_legal_w))
+        # 5. 最终锁定：Clamp
+        final_w = min(desired_w, max_legal_w)
+        if final_w < 1: final_w = 1 # 最小 1 像素防止消失
         final_h = final_w / ratio
 
-        # ---------- 6. 从锚点生成新框 ----------
-        nx1 = ax
-        ny1 = ay
-        nx2 = ax + dir_x * final_w
-        ny2 = ay + dir_y * final_h
+        # 6. 从锚点出发，根据方向生成坐标
+        # 水平轴
+        if 'e' in drag_handle:
+            nx1, nx2 = anchor_x, anchor_x + final_w
+        elif 'w' in drag_handle:
+            nx1, nx2 = anchor_x - final_w, anchor_x
+        else:
+            nx1, nx2 = x1, x2
 
-        # ---------- 7. 归一化 & 取整 ----------
-        nx1, nx2 = sorted((nx1, nx2))
-        ny1, ny2 = sorted((ny1, ny2))
+        # 垂直轴
+        if 's' in drag_handle:
+            ny1, ny2 = anchor_y, anchor_y + final_h
+        elif 'n' in drag_handle:
+            ny1, ny2 = anchor_y - final_h, anchor_y
+        else:
+            ny1, ny2 = y1, y2
 
-        return (
-            int(round(nx1)),
-            int(round(ny1)),
-            int(round(nx2)),
-            int(round(ny2)),
-        )
+        # 7. 最后的取整（必须在映射完坐标后统一进行，且不再做二次校验）
+        return (int(round(nx1)), int(round(ny1)), int(round(nx2)), int(round(ny2)))
 
     def get_current_ratio(self, x1: int, y1: int, x2: int, y2: int) -> float:
         """获取当前选框的比例"""
@@ -722,9 +684,5 @@ def crop_image(image, x1, y1, x2, y2):
     y2 = max(y1, min(y2, image.height))
 
     return image.crop((x1, y1, x2, y2))
-
-
-# 向后兼容别名
-CropRatioController = CropRatioHandler
 
 

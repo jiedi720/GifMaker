@@ -19,7 +19,7 @@ from function.image_utils import (
     calculate_scale_to_fit,
     calculate_scale_to_fill
 )
-from function.crop import CropState, CropRatioHandler, find_smallest_image_path, calculate_scaled_dimensions, convert_canvas_to_image_coords, validate_crop_coordinates, calculate_aspect_ratio, apply_aspect_ratio_constraints, determine_crop_strategy, crop_image
+from function.crop import CropState, CropRatioController, find_smallest_image_path, calculate_scaled_dimensions, convert_canvas_to_image_coords, validate_crop_coordinates, calculate_aspect_ratio, determine_crop_strategy, crop_image
 from function.ui_operations import ensure_widget_rendered
 
 class CropDialog:
@@ -46,7 +46,7 @@ class CropDialog:
         self.drag_start_pos = None
         self.drag_start_coords = None
 
-        self.ratio_handler = CropRatioHandler()
+        self.ratio_handler = CropRatioController(self)
         self.ratio_handler.dialog = self
 
         self.is_moving_selection = False
@@ -700,8 +700,9 @@ class CropDialog:
 
 
             from function.crop import validate_crop_coordinates
+            is_ratio_locked = self.ratio_handler.is_ratio_locked and self.ratio_handler.ratio_value
             new_x1, new_y1, new_x2, new_y2 = validate_crop_coordinates(
-                new_x1, new_y1, new_x2, new_y2, self.original_image.width, self.original_image.height
+                new_x1, new_y1, new_x2, new_y2, self.original_image.width, self.original_image.height, is_ratio_locked
             )
 
             self.x1_var.set(str(new_x1))
@@ -763,14 +764,12 @@ class CropDialog:
                 y2 = min(self.original_image.height, y2)
 
             # 验证坐标（确保最小尺寸和正确顺序）
+            # 如果启用了比例锁定，传递 is_ratio_locked=True 避免破坏比例
             from function.crop import validate_crop_coordinates
+            is_ratio_locked = self.ratio_handler.is_ratio_locked and self.ratio_handler.ratio_value
             x1, y1, x2, y2 = validate_crop_coordinates(
-                x1, y1, x2, y2, self.original_image.width, self.original_image.height
+                x1, y1, x2, y2, self.original_image.width, self.original_image.height, is_ratio_locked
             )
-
-            # 如果启用了比例锁定，再次应用比例约束以确保比例不被破坏
-            if self.ratio_handler.is_ratio_locked and self.ratio_handler.ratio_value:
-                x1, y1, x2, y2 = self.ratio_handler.adjust_coords_by_ratio(x1, y1, x2, y2, self.dragging_handle)
 
             self.x1_var.set(str(x1))
             self.y1_var.set(str(y1))
@@ -829,8 +828,9 @@ class CropDialog:
 
 
                 from function.crop import validate_crop_coordinates
+                is_ratio_locked = self.ratio_handler.is_ratio_locked and self.ratio_handler.ratio_value
                 orig_x1, orig_y1, orig_x2, orig_y2 = validate_crop_coordinates(
-                    orig_x1, orig_y1, orig_x2, orig_y2, self.original_image.width, self.original_image.height
+                    orig_x1, orig_y1, orig_x2, orig_y2, self.original_image.width, self.original_image.height, is_ratio_locked
                 )
 
                 self.x1_var.set(str(orig_x1))

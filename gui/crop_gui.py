@@ -448,6 +448,9 @@ class CropDialog:
             # 清除之前的选择框
             self.clear_selection()
             
+            # 在窗口显示后重新计算适应窗口（确保画布尺寸正确）
+            self.dialog.after(100, self.fit_to_window)
+            
         except Exception as e:
             messagebox.showerror("错误", f"无法加载图片：{str(e)}")
     
@@ -607,8 +610,10 @@ class CropDialog:
             # 格式化比例显示
             if current_ratio >= 1:
                 ratio_text = f"{current_ratio:.2f}:1"
-            else:
+            elif current_ratio > 0:
                 ratio_text = f"1:{1/current_ratio:.2f}"
+            else:
+                ratio_text = "N/A"
         else:
             ratio_text = "N/A"
         

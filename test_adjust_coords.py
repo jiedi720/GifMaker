@@ -1,6 +1,6 @@
 # 测试 adjust_coords_by_ratio 函数
 
-from function.crop import CropRatioHandler
+from function.crop_backup import CropRatioHandler
 
 # 创建一个测试用的 handler
 handler = CropRatioHandler()

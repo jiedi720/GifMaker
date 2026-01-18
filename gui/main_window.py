@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 导入功能模块
 from function.image_utils import load_image, get_image_info, resize_image, create_photo_image, calculate_scale_to_fit, calculate_scale_to_fill
-from function.crop import crop_image
+from function.crop_backup import crop_image
 from function.history_manager import HistoryManager
 from function.file_manager import get_image_files, validate_image_path, get_file_size_kb
 from function.gif_operations import create_gif

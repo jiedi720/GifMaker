@@ -11,7 +11,7 @@ from .image_utils import (
     calculate_scale_to_fill
 )
 
-from .crop import crop_image
+from .crop_backup import crop_image
 
 __all__ = [
     'load_image',

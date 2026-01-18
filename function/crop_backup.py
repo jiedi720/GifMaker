@@ -14,10 +14,10 @@ from .history_manager import HistoryManager
 class CropRatioHandler:
     """裁剪比例处理器"""
 
-    def __init__(self):
+    def __init__(self, dialog=None):
         self.is_ratio_locked = False
         self.ratio_value = None
-        self.dialog = None  # Reference to CropDialog instance
+        self.dialog = dialog  # Reference to CropDialog instance
 
     def lock_ratio(self, ratio_type: str, x1: int, y1: int, x2: int, y2: int) -> Tuple[bool, float, Tuple[int, int, int, int]]:
         """锁定比例
@@ -684,5 +684,9 @@ def crop_image(image, x1, y1, x2, y2):
     y2 = max(y1, min(y2, image.height))
 
     return image.crop((x1, y1, x2, y2))
+
+
+# 别名，保持向后兼容
+CropRatioController = CropRatioHandler
 
 

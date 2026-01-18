@@ -175,7 +175,7 @@ def enter_crop_mode(main_window_instance):
             save_state(main_window_instance)
 
             from function.image_utils import load_image
-            from function.crop import crop_image
+            from function.crop_backup import crop_image
 
             if result.get('is_base_image', False):
 

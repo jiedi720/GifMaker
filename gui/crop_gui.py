@@ -116,7 +116,10 @@ class GUIBuilder:
         # 2. 比例设置
         self.create_ratio_settings()
         
-        # 3. 操作按钮
+        # 3. 预览控制
+        self.create_preview_controls()
+        
+        # 4. 操作按钮
         self.create_action_buttons()
     
     def create_file_operations(self):
@@ -231,6 +234,59 @@ class GUIBuilder:
                 command=lambda v=value: self.callbacks['on_ratio_change'](v)
             )
             rb.grid(row=row, column=col, sticky="w", padx=5, pady=2)
+    
+    def create_preview_controls(self):
+        """创建预览控制区域"""
+        preview_group = ttk.LabelFrame(
+            self.widgets['modules_container'], 
+            text="预览控制", 
+            padding=5
+        )
+        preview_group.pack(fill="x", pady=(0, 15), ipadx=10)
+        
+        # 裁剪预览按钮
+        self.widgets['preview_crop_btn'] = ttk.Button(
+            preview_group, 
+            text="👁️ 裁剪预览", 
+            command=self.callbacks['preview_crop']
+        )
+        self.widgets['preview_crop_btn'].pack(fill="x", pady=5)
+        
+        # 图片导航按钮行
+        nav_row = ttk.Frame(preview_group)
+        nav_row.pack(fill="x", pady=(5, 0))
+        
+        # 第一张按钮
+        self.widgets['first_btn'] = ttk.Button(
+            nav_row, 
+            text="⏮️ 第一张", 
+            command=lambda: self.callbacks['navigate_image']('first')
+        )
+        self.widgets['first_btn'].pack(side="left", padx=2, fill="x", expand=True)
+        
+        # 上一张按钮
+        self.widgets['prev_btn'] = ttk.Button(
+            nav_row, 
+            text="◀️ 上一张", 
+            command=lambda: self.callbacks['navigate_image']('prev')
+        )
+        self.widgets['prev_btn'].pack(side="left", padx=2, fill="x", expand=True)
+        
+        # 下一张按钮
+        self.widgets['next_btn'] = ttk.Button(
+            nav_row, 
+            text="▶️ 下一张", 
+            command=lambda: self.callbacks['navigate_image']('next')
+        )
+        self.widgets['next_btn'].pack(side="left", padx=2, fill="x", expand=True)
+        
+        # 当前图片显示标签
+        self.widgets['current_img_label'] = ttk.Label(
+            preview_group, 
+            text="1 / 1", 
+            font=("Microsoft YaHei UI", 9)
+        )
+        self.widgets['current_img_label'].pack(pady=(5, 0))
     
     def create_action_buttons(self):
         """创建操作按钮区域"""
@@ -380,6 +436,10 @@ class CropDialog:
         self.locked_ratio = None
         self.original_ratio = None
         
+        # 图片导航相关变量
+        self.current_image_index = current_index  # 当前图片索引
+        self.image_paths = image_paths  # 所有图片路径
+        
         # 创建GUI界面
         self.setup_gui()
         
@@ -422,7 +482,9 @@ class CropDialog:
             'on_mouse_up': self.on_mouse_up,
             'on_mouse_move': self.on_mouse_move,
             'fit_to_window': self.fit_to_window,
-            'original_size': self.original_size
+            'original_size': self.original_size,
+            'preview_crop': self.preview_crop,
+            'navigate_image': self.navigate_image
         }
         
         # 创建GUI构建器
@@ -451,6 +513,165 @@ class CropDialog:
         
         # 清除之前的选择框
         self.clear_selection()
+        
+        # 更新当前图片显示
+        self.update_current_image_label()
+    
+    def update_current_image_label(self):
+        """更新当前图片显示标签"""
+        label = self.gui.get_widget('current_img_label')
+        if label:
+            label.config(text=f"{self.current_image_index + 1} / {len(self.image_paths)}")
+    
+    def navigate_image(self, direction):
+        """导航到其他图片"""
+        if not self.image_paths or len(self.image_paths) <= 1:
+            return
+        
+        old_index = self.current_image_index
+        
+        if direction == 'first':
+            self.current_image_index = 0
+        elif direction == 'prev':
+            self.current_image_index = max(0, self.current_image_index - 1)
+        elif direction == 'next':
+            self.current_image_index = min(len(self.image_paths) - 1, self.current_image_index + 1)
+        
+        # 如果索引改变了，加载新图片
+        if old_index != self.current_image_index:
+            self.load_image(self.image_paths[self.current_image_index])
+    
+    def preview_crop(self):
+        """预览裁剪结果 - 在原图上显示"""
+        if not self.original_image or not self.selection_coords:
+            messagebox.showwarning("警告", "请先在图像上选择裁剪区域")
+            return
+        
+        try:
+            x1, y1, x2, y2 = self.selection_coords
+            
+            img_x1 = (x1 - self.image_offset_x) / self.scale_factor
+            img_y1 = (y1 - self.image_offset_y) / self.scale_factor
+            img_x2 = (x2 - self.image_offset_x) / self.scale_factor
+            img_y2 = (y2 - self.image_offset_y) / self.scale_factor
+            
+            img_x1, img_x2 = min(img_x1, img_x2), max(img_x1, img_x2)
+            img_y1, img_y2 = min(img_y1, img_y2), max(img_y1, img_y2)
+            
+            cropped_image = self.original_image.crop((img_x1, img_y1, img_x2, img_y2))
+            
+            # 在原图上显示裁剪预览
+            self.show_crop_on_canvas(cropped_image, x1, y1, x2, y2)
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"预览失败：{str(e)}")
+    
+    def show_crop_on_canvas(self, cropped_image, x1, y1, x2, y2):
+        """在画布上显示裁剪预览"""
+        canvas = self.gui.get_widget('canvas')
+        
+        # 确保坐标顺序正确
+        x1, x2 = min(x1, x2), max(x1, x2)
+        y1, y2 = min(y1, y2), max(y1, y2)
+        
+        # 计算裁剪区域的大小
+        crop_width = x2 - x1
+        crop_height = y2 - y1
+        
+        # 在画布上创建一个半透明的遮罩层
+        # 先创建一个覆盖整个画布的半透明黑色矩形
+        canvas_width = canvas.winfo_width()
+        canvas_height = canvas.winfo_height()
+        
+        # 创建半透明遮罩（使用 stipple 模拟透明效果）
+        canvas.create_rectangle(
+            0, 0, canvas_width, canvas_height,
+            fill="black",
+            stipple="gray50",
+            tags="preview_mask"
+        )
+        
+        # 清除裁剪区域的遮罩，让裁剪区域清晰显示
+        # 在裁剪区域绘制一个白色矩形作为背景
+        canvas.create_rectangle(
+            x1, y1, x2, y2,
+            fill="white",
+            outline="yellow",
+            width=3,
+            tags="preview_area"
+        )
+        
+        # 在裁剪区域显示裁剪后的图片
+        # 计算缩放比例以适应裁剪区域
+        img_width, img_height = cropped_image.size
+        scale_x = crop_width / img_width
+        scale_y = crop_height / img_height
+        
+        # 如果裁剪区域比原图小，需要缩放
+        if scale_x < 1 or scale_y < 1:
+            scale = min(scale_x, scale_y)
+            display_width = int(img_width * scale)
+            display_height = int(img_height * scale)
+            cropped_display = cropped_image.resize(
+                (display_width, display_height),
+                Image.Resampling.LANCZOS
+            )
+        else:
+            cropped_display = cropped_image
+            display_width = crop_width
+            display_height = crop_height
+        
+        # 转换为 Tkinter 图像对象
+        preview_photo = ImageTk.PhotoImage(cropped_display)
+        
+        # 居中显示在裁剪区域内
+        offset_x = x1 + (crop_width - display_width) // 2
+        offset_y = y1 + (crop_height - display_height) // 2
+        
+        # 在裁剪区域显示预览图片
+        canvas.create_image(
+            offset_x, offset_y,
+            image=preview_photo,
+            anchor=tk.NW,
+            tags="preview_image"
+        )
+        
+        # 保存引用以防止被垃圾回收
+        canvas.preview_photo = preview_photo
+        
+        # 显示裁剪尺寸信息
+        info_text = f"裁剪尺寸: {img_width} x {img_height} 像素"
+        canvas.create_text(
+            x1 + crop_width // 2, y1 - 15,
+            text=info_text,
+            fill="yellow",
+            font=("Arial", 10, "bold"),
+            tags="preview_text"
+        )
+        
+        # 添加提示信息
+        hint_text = "点击任意位置关闭预览"
+        canvas.create_text(
+            canvas_width // 2, canvas_height - 20,
+            text=hint_text,
+            fill="white",
+            font=("Arial", 10),
+            tags="preview_text"
+        )
+        
+        # 绑定点击事件来关闭预览
+        canvas.bind("<Button-1>", self.close_preview, add="+")
+    
+    def close_preview(self, event=None):
+        """关闭预览"""
+        canvas = self.gui.get_widget('canvas')
+        canvas.delete("preview_mask")
+        canvas.delete("preview_area")
+        canvas.delete("preview_image")
+        canvas.delete("preview_text")
+        
+        # 解绑点击事件
+        canvas.unbind("<Button-1>", self.close_preview)
     
     def calculate_scale_and_display(self):
         """计算缩放比例并在画布上显示图像"""

@@ -488,10 +488,6 @@ class CropDialog:
             x2 = int(self.x2_var.get())
             y2 = int(self.y2_var.get())
 
-            from function.history_manager import save_crop_state
-            save_crop_state(self.crop_state)
-
-
             if len(self.image_paths) > 1 and self.is_base_image:
                 # 获取基准图片宽度
                 base_width = self.original_image.width
@@ -558,26 +554,25 @@ class CropDialog:
     
     def _cleanup_all_tooltips(self):
         """清理所有tooltip"""
-        # 遍历所有子控件，清理tooltip
-        for widget in self.dialog.winfo_children():
+        def recursive_cleanup(widget):
+            """递归清理控件及其所有子控件的tooltip"""
             if hasattr(widget, '_tooltip'):
                 try:
                     widget._tooltip.destroy()
                 except:
                     pass
                 del widget._tooltip
-            # 递归清理子控件的tooltip
+            
+            # 递归清理子控件
             for child in widget.winfo_children():
-                if hasattr(child, '_tooltip'):
-                    try:
-                        child._tooltip.destroy()
-                    except:
-                        pass
-                    del child._tooltip
-
+                recursive_cleanup(child)
+        
+        # 递归清理所有控件的tooltip
+        recursive_cleanup(self.dialog)
+        
         # 清理所有 Toplevel 窗口（除了对话框本身）
         try:
-            all_windows = self.dialog.winfo_children()
+            all_windows = self.dialog.winfo_toplevel().winfo_children()
             for window in all_windows:
                 if isinstance(window, tk.Toplevel) and window != self.dialog:
                     try:
@@ -586,6 +581,9 @@ class CropDialog:
                         pass
         except:
             pass
+        
+        # 强制更新UI，确保tooltip被彻底清理
+        self.dialog.update_idletasks()
         
     def show(self):
         self.dialog.wait_window()

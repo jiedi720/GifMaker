@@ -702,6 +702,21 @@ class GifMakerGUI:
                     tags="selection_box"
                 )
 
+        # 绘制裁剪图片的黄色虚线边框
+        for img_path in self.pending_crops:
+            # 找到该图片在列表中的索引
+            if img_path in self.image_paths:
+                index = self.image_paths.index(img_path)
+                if 0 <= index < len(self.image_rects):
+                    rect = self.image_rects[index]
+                    self.preview_canvas.create_rectangle(
+                        rect['x1'], rect['y1'], rect['x2'], rect['y2'],
+                        outline="#FFFF00",
+                        width=3,
+                        dash=(5, 5),
+                        tags="selection_box"
+                    )
+
         # 确保选中框在最上层
         self.preview_canvas.tag_raise("selection_box")
 

@@ -255,6 +255,13 @@ def undo(main_window_instance):
     Args:
         main_window_instance: 主窗口实例
     """
+    print(f"撤销: 开始撤销操作")
+    print(f"  当前 pending_crops 数量: {len(main_window_instance.pending_crops)}")
+    print(f"  当前 pending_crop_coords 数量: {len(main_window_instance.pending_crop_coords)}")
+    print(f"  当前 image_paths 数量: {len(main_window_instance.image_paths)}")
+    print(f"  可以撤销: {main_window_instance.history_manager.can_undo()}")
+    print(f"  撤销栈深度: {main_window_instance.history_manager.get_undo_count()}")
+    
     if not main_window_instance.history_manager.can_undo():
         messagebox.showinfo("提示", "没有可撤销的操作")
         return
@@ -287,13 +294,42 @@ def undo(main_window_instance):
 
             # 恢复待保存的裁剪信息
             if 'pending_crops' in previous_state:
+                print(f"撤销: 恢复 pending_crops")
+                print(f"  当前 pending_crops: {list(main_window_instance.pending_crops.keys())}")
+                print(f"  目标 pending_crops: {list(previous_state['pending_crops'].keys())}")
+
                 # 清除previous_state中不存在的裁剪
-                for img_path in previous_state['pending_crops'].keys():
+                current_pending = set(main_window_instance.pending_crops.keys())
+                previous_pending = set(previous_state['pending_crops'].keys())
+                to_remove = current_pending - previous_pending
+                for img_path in to_remove:
                     if img_path in main_window_instance.pending_crops:
                         del main_window_instance.pending_crops[img_path]
                         print(f"已清除待保存的裁剪: {img_path}")
                     if img_path in main_window_instance.pending_crop_coords:
                         del main_window_instance.pending_crop_coords[img_path]
+
+                # 添加previous_state中存在的裁剪
+                to_add = previous_pending - current_pending
+                print(f"  需要添加的裁剪: {list(to_add)}")
+                for img_path in to_add:
+                    # 重新加载图片并应用裁剪
+                    from function.image_utils import load_image
+                    from function.crop import crop_image
+                    img = load_image(img_path)
+                    if img and img_path in previous_state['pending_crops']:
+                        crop_data = previous_state['pending_crops'][img_path]
+                        print(f"  裁剪数据: {crop_data}")
+                        # 检查crop_data格式
+                        if isinstance(crop_data, dict) and 'coords' in crop_data:
+                            x1, y1, x2, y2 = crop_data['coords']
+                            print(f"  应用裁剪坐标: ({x1}, {y1}, {x2}, {y2})")
+                            cropped_img = crop_image(img, x1, y1, x2, y2)
+                            main_window_instance.pending_crops[img_path] = cropped_img
+                            main_window_instance.pending_crop_coords[img_path] = (x1, y1, x2, y2)
+                            print(f"已恢复待保存的裁剪: {img_path}")
+                        else:
+                            print(f"  警告: 裁剪数据格式不正确: {crop_data}")
         else:
             # 兼容旧版本（没有pending_crops字段）
             main_window_instance.image_paths = previous_state

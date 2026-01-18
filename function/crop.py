@@ -148,208 +148,116 @@ class CropRatioHandler:
 
             return (x1, y1, x2, new_y2)
 
-    def adjust_coords_by_ratio(self, x1: int, y1: int, x2: int, y2: int, drag_handle: str = None) -> Tuple[int, int, int, int]:
-        """根据锁定的比例调整坐标
+    def adjust_coords_by_ratio(
+    self,
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    drag_handle: str = None
+) -> Tuple[int, int, int, int]:
+        """严格比例锁定（稳定版）：锚点 + 唯一尺寸模型"""
+        if not self.is_ratio_locked or not self.ratio_value or not drag_handle:
+            return x1, y1, x2, y2
 
-        Args:
-            x1, y1, x2, y2: 当前坐标
-            drag_handle: 拖拽的句柄类型 ('nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w')
+        if not self.dialog or not hasattr(self.dialog, "original_image"):
+            return x1, y1, x2, y2
 
-        Returns:
-            tuple: 调整后的坐标 (x1, y1, x2, y2)
-        """
-        if not self.is_ratio_locked or not self.ratio_value:
-            return (x1, y1, x2, y2)
+        img_w, img_h = self.dialog.original_image.size
+        if img_w <= 0 or img_h <= 0:
+            return x1, y1, x2, y2
 
-        width = abs(x2 - x1)
-        height = abs(y2 - y1)
+        ratio = float(self.ratio_value)
 
-        if width == 0 or height == 0:
-            return (x1, y1, x2, y2)
+        # ------------------------------------------------------------------
+        # 1. 计算鼠标"期望尺寸"（仅作为请求，不是事实）
+        # ------------------------------------------------------------------
+        raw_w = abs(x2 - x1)
+        raw_h = abs(y2 - y1)
 
-        # 获取图片尺寸
-        img_width, img_height = 0, 0
-        if self.dialog and hasattr(self.dialog, 'original_image'):
-            img_width, img_height = self.dialog.original_image.size
+        if drag_handle in ("e", "w"):
+            desired_w = raw_w
+        elif drag_handle in ("n", "s"):
+            desired_w = raw_h * ratio
+        else:  # corner
+            desired_w = min(raw_w, raw_h * ratio)
 
-        # 保存原始坐标用于边界检查
-        orig_x1, orig_y1, orig_x2, orig_y2 = x1, y1, x2, y2
+        if desired_w <= 0:
+            return x1, y1, x2, y2
 
-        if drag_handle in ['nw', 'ne', 'sw', 'se']:
-            # 角点拖拽：根据宽度调整高度
-            new_height = int(width / self.ratio_value)
-            if drag_handle in ['nw', 'sw']:
-                y1 = y2 - new_height
-            else:
-                y2 = y1 + new_height
+        # ------------------------------------------------------------------
+        # 2. 确定固定锚点（唯一可信坐标）
+        # ------------------------------------------------------------------
+        if drag_handle in ("e", "s", "se"):
+            anchor_x, anchor_y = x1, y1
+        elif drag_handle in ("w", "sw"):
+            anchor_x, anchor_y = x2, y1
+        elif drag_handle in ("n", "ne"):
+            anchor_x, anchor_y = x1, y2
+        elif drag_handle == "nw":
+            anchor_x, anchor_y = x2, y2
+        else:
+            return x1, y1, x2, y2
 
-            # 检查边界，如果超出则停止调整
-            if img_width > 0 and img_height > 0:
-                # 确保坐标在图片边界内
-                y1 = max(0, y1)
-                y2 = min(img_height, y2)
-                x1 = max(0, x1)
-                x2 = min(img_width, x2)
+        # ------------------------------------------------------------------
+        # 3. 从锚点计算最大合法尺寸（这是冻结的根源）
+        # ------------------------------------------------------------------
+        if drag_handle in ("e", "s", "se"):
+            max_w_by_x = img_w - anchor_x
+            max_h_by_y = img_h - anchor_y
+        elif drag_handle in ("w", "sw"):
+            max_w_by_x = anchor_x
+            max_h_by_y = img_h - anchor_y
+        elif drag_handle in ("n", "ne"):
+            max_w_by_x = img_w - anchor_x
+            max_h_by_y = anchor_y
+        elif drag_handle == "nw":
+            max_w_by_x = anchor_x
+            max_h_by_y = anchor_y
 
-                # 如果调整后比例不正确，则根据拖拽方向调整
-                current_ratio = (x2 - x1) / (y2 - y1) if (y2 - y1) > 0 else 0
-                if abs(current_ratio - self.ratio_value) > 0.01:
-                    # 比例不正确，需要调整
-                    # 根据拖拽方向决定调整哪个坐标
-                    if drag_handle == 'nw':
-                        # 左上角：保持 x2, y2 不变，调整 x1, y1
-                        new_width = int((y2 - y1) * self.ratio_value)
-                        x1 = x2 - new_width
-                        x1 = max(0, x1)
-                        # 重新计算 y1
-                        new_height = int((x2 - x1) / self.ratio_value)
-                        y1 = y2 - new_height
-                        y1 = max(0, y1)
-                    elif drag_handle == 'ne':
-                        # 右上角：保持 x1, y2 不变，调整 x2, y1
-                        new_width = int((y2 - y1) * self.ratio_value)
-                        x2 = x1 + new_width
-                        x2 = min(img_width, x2)
-                        # 重新计算 y1
-                        new_height = int((x2 - x1) / self.ratio_value)
-                        y1 = y2 - new_height
-                        y1 = max(0, y1)
-                    elif drag_handle == 'sw':
-                        # 左下角：保持 x2, y1 不变，调整 x1, y2
-                        new_width = int((y2 - y1) * self.ratio_value)
-                        x1 = x2 - new_width
-                        x1 = max(0, x1)
-                        # 重新计算 y2
-                        new_height = int((x2 - x1) / self.ratio_value)
-                        y2 = y1 + new_height
-                        y2 = min(img_height, y2)
-                    elif drag_handle == 'se':
-                        # 右下角：保持 x1, y1 不变，调整 x2, y2
-                        new_width = int((y2 - y1) * self.ratio_value)
-                        x2 = x1 + new_width
-                        x2 = min(img_width, x2)
-                        # 重新计算 y2
-                        new_height = int((x2 - x1) / self.ratio_value)
-                        y2 = y1 + new_height
-                        y2 = min(img_height, y2)
+        max_w_by_y = max_h_by_y * ratio
+        max_legal_w = max(0, min(max_w_by_x, max_w_by_y))
 
-        elif drag_handle in ['n', 's']:
-            # 上下边拖拽：根据高度调整宽度
-            new_width = int(height * self.ratio_value)
-            if drag_handle == 'n':
-                x1 = x2 - new_width
-            else:
-                x2 = x1 + new_width
+        # ------------------------------------------------------------------
+        # 4. 冻结尺寸（比例在此被永久保证）
+        # ------------------------------------------------------------------
+        final_w = min(desired_w, max_legal_w)
+        final_h = final_w / ratio
+        final_w = int(round(final_w))
+        final_h = int(round(final_h))
 
-            # 检查边界，如果超出则停止调整
-            if img_width > 0 and img_height > 0:
-                # 确保坐标在图片边界内
-                x1 = max(0, x1)
-                x2 = min(img_width, x2)
-                y1 = max(0, y1)
-                y2 = min(img_height, y2)
+        # ------------------------------------------------------------------
+        # 5. 从锚点推导最终坐标（坐标只是结果）
+        # ------------------------------------------------------------------
+        if drag_handle in ("e", "s", "se"):
+            nx1, ny1 = anchor_x, anchor_y
+            nx2 = nx1 + final_w
+            ny2 = ny1 + final_h
 
-                # 如果调整后比例不正确，则根据拖拽方向调整
-                current_ratio = (x2 - x1) / (y2 - y1) if (y2 - y1) > 0 else 0
-                if abs(current_ratio - self.ratio_value) > 0.01:
-                    # 比例不正确，需要调整
-                    if drag_handle == 'n':
-                        # 上边：保持 x2 不变，调整 x1, y1
-                        new_height = int((x2 - x1) / self.ratio_value)
-                        y1 = y2 - new_height
-                        y1 = max(0, y1)
-                        # 重新计算 x1
-                        new_width = int((y2 - y1) * self.ratio_value)
-                        x1 = x2 - new_width
-                        x1 = max(0, x1)
-                    else:
-                        # 下边：保持 x1 不变，调整 x2, y2
-                        new_height = int((x2 - x1) / self.ratio_value)
-                        y2 = y1 + new_height
-                        y2 = min(img_height, y2)
-                        # 重新计算 x2
-                        new_width = int((y2 - y1) * self.ratio_value)
-                        x2 = x1 + new_width
-                        x2 = min(img_width, x2)
+        elif drag_handle in ("w", "sw"):
+            nx2, ny1 = anchor_x, anchor_y
+            nx1 = nx2 - final_w
+            ny2 = ny1 + final_h
 
-        elif drag_handle in ['e', 'w']:
-            # 左右边拖拽：根据宽度调整高度
-            new_height = int(width / self.ratio_value)
-            if drag_handle == 'w':
-                y1 = y2 - new_height
-            else:
-                y2 = y1 + new_height
+        elif drag_handle in ("n", "ne"):
+            nx1, ny2 = anchor_x, anchor_y
+            nx2 = nx1 + final_w
+            ny1 = ny2 - final_h
 
-            # 检查边界，如果超出则停止调整
-            if img_width > 0 and img_height > 0:
-                # 确保坐标在图片边界内
-                x1 = max(0, x1)
-                x2 = min(img_width, x2)
-                y1 = max(0, y1)
-                y2 = min(img_height, y2)
+        elif drag_handle == "nw":
+            nx2, ny2 = anchor_x, anchor_y
+            nx1 = nx2 - final_w
+            ny1 = ny2 - final_h
 
-                # 如果调整后比例不正确，则根据拖拽方向调整
-                current_ratio = (x2 - x1) / (y2 - y1) if (y2 - y1) > 0 else 0
-                if abs(current_ratio - self.ratio_value) > 0.01:
-                    # 比例不正确，需要调整
-                    if drag_handle == 'w':
-                        # 左边：保持 y2 不变，调整 x1, y1
-                        new_width = int((y2 - y1) * self.ratio_value)
-                        x1 = x2 - new_width
-                        x1 = max(0, x1)
-                        # 重新计算 y1
-                        new_height = int((x2 - x1) / self.ratio_value)
-                        y1 = y2 - new_height
-                        y1 = max(0, y1)
-                    else:
-                        # 右边：保持 y1 不变，调整 x2, y2
-                        new_width = int((y2 - y1) * self.ratio_value)
-                        x2 = x1 + new_width
-                        x2 = min(img_width, x2)
-                        # 重新计算 y2
-                        new_height = int((x2 - x1) / self.ratio_value)
-                        y2 = y1 + new_height
-                        y2 = min(img_height, y2)
+        # ------------------------------------------------------------------
+        # 6. 最终保险裁剪（防浮点/舍入误差）
+        # ------------------------------------------------------------------
+        nx1 = max(0, min(img_w, nx1))
+        nx2 = max(0, min(img_w, nx2))
+        ny1 = max(0, min(img_h, ny1))
+        ny2 = max(0, min(img_h, ny2))
 
-        # 最终确保所有坐标都在边界内
-        x1 = max(0, x1)
-        y1 = max(0, y1)
-        x2 = min(img_width, x2) if img_width > 0 else x2
-        y2 = min(img_height, y2) if img_height > 0 else y2
-
-        # 确保最小尺寸（避免宽度或高度为0）
-        if abs(x2 - x1) < 1:
-            if drag_handle in ['nw', 'w', 'sw']:
-                x1 = max(0, x2 - 1)
-            else:
-                x2 = min(img_width, x1 + 1) if img_width > 0 else x1 + 1
-        if abs(y2 - y1) < 1:
-            if drag_handle in ['nw', 'n', 'ne']:
-                y1 = max(0, y2 - 1)
-            else:
-                y2 = min(img_height, y1 + 1) if img_height > 0 else y1 + 1
-
-        return (x1, y1, x2, y2)
-
-        # 最终确保所有坐标都在边界内
-        x1 = max(0, x1)
-        y1 = max(0, y1)
-        x2 = min(img_width, x2) if img_width > 0 else x2
-        y2 = min(img_height, y2) if img_height > 0 else y2
-
-        # 确保最小尺寸（避免宽度或高度为0）
-        if abs(x2 - x1) < 1:
-            if drag_handle in ['nw', 'w', 'sw']:
-                x1 = max(0, x2 - 1)
-            else:
-                x2 = min(img_width, x1 + 1) if img_width > 0 else x1 + 1
-        if abs(y2 - y1) < 1:
-            if drag_handle in ['nw', 'n', 'ne']:
-                y1 = max(0, y2 - 1)
-            else:
-                y2 = min(img_height, y1 + 1) if img_height > 0 else y1 + 1
-
-        return (x1, y1, x2, y2)
+        return nx1, ny1, nx2, ny2
 
     def get_current_ratio(self, x1: int, y1: int, x2: int, y2: int) -> float:
         """获取当前选框的比例"""

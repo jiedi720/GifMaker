@@ -30,9 +30,13 @@ class GifPreviewWindow:
         self.window = tk.Toplevel(parent)
         self.window.title("GIF Preview")
 
-        # 使用固定窗口尺寸
-        self.window_width = 1500
-        self.window_height = 800
+        # 使用与主界面相同的窗口尺寸
+        self.window_width = 1366
+        self.window_height = 768
+
+        # 设置窗口大小限制
+        self.window.minsize(1366, 768)
+        self.window.maxsize(1920, 1080)
 
         # 直接使用固定尺寸，不根据图片调整
         self.window.geometry(f"{self.window_width}x{self.window_height}")

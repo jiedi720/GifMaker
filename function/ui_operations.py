@@ -170,6 +170,10 @@ def enter_crop_mode(main_window_instance):
         )
 
         if result:
+            # 在应用裁剪之前先保存状态
+            from function.history_manager import save_state
+            save_state(main_window_instance)
+
             from function.image_utils import load_image
             from function.crop import crop_image
 

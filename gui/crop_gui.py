@@ -333,6 +333,12 @@ class CropDialog:
         self.dialog.geometry("1280x720")
         self.dialog.minsize(800, 600)
         
+        # 先隐藏窗口，等待所有组件初始化完成后再显示
+        self.dialog.withdraw()
+        
+        # 设置窗口居中
+        self.center_window()
+        
         # 模态对话框
         self.dialog.transient(root)
         self.dialog.grab_set()
@@ -383,8 +389,29 @@ class CropDialog:
         # 加载图片
         self.load_image(image_path)
         
+        # 显示窗口（所有组件初始化完成后）
+        self.dialog.deiconify()
+        self.dialog.update_idletasks()
+        
         # 等待对话框关闭
         self.dialog.wait_window()
+    
+    def center_window(self):
+        """将窗口居中显示"""
+        # 获取屏幕尺寸
+        screen_width = self.dialog.winfo_screenwidth()
+        screen_height = self.dialog.winfo_screenheight()
+        
+        # 使用设置的默认尺寸
+        width = 1280
+        height = 720
+        
+        # 计算居中位置
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
+        
+        # 在窗口显示前就设置好位置
+        self.dialog.geometry(f'{width}x{height}+{x}+{y}')
     
     def setup_gui(self):
         """设置GUI界面"""

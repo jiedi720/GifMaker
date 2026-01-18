@@ -163,8 +163,11 @@ class CropRatioHandler:
         elif drive == "y":
             desired_w = raw_h * ratio
         else:
-            # corner：用最小约束（保证比例并且尽可能贴近用户动作）
-            desired_w = min(raw_w, raw_h * ratio)
+            # corner：取变化量最大的轴作为驱动，防止选框缩死
+            if raw_w >= raw_h * ratio:
+                desired_w = raw_w
+            else:
+                desired_w = raw_h * ratio
 
         # 5. clamp（保证不超出图片边界）
         max_legal_w = min(max_w, max_h * ratio)
@@ -182,6 +185,12 @@ class CropRatioHandler:
         ny1, ny2 = sorted((ny1, ny2))
 
         return int(round(nx1)), int(round(ny1)), int(round(nx2)), int(round(ny2))
+
+    def adjust(self, x1: int, y1: int, x2: int, y2: int, handle="se"):
+        """供外部调用，自动判断是否需要锁定"""
+        if not self.is_ratio_locked:
+            return x1, y1, x2, y2
+        return self.adjust_coords_by_ratio(x1, y1, x2, y2, drag_handle=handle)
 
     def get_current_ratio(self, x1: int, y1: int, x2: int, y2: int) -> float:
         """获取当前选框的比例"""
@@ -298,13 +307,17 @@ class CropRatioHandler:
                     new_y2 = ratio_handler.dialog.original_image.height
                     new_y1 = max(0, new_y2 - new_height)
 
-                # 更新裁剪框坐标
-                x1_var.set(str(int(round(new_x1))))
-                y1_var.set(str(int(round(new_y1))))
-                x2_var.set(str(int(round(new_x2))))
-                y2_var.set(str(int(round(new_y2))))
+                # ⚠️ 修正：必须强制转为整数，并确保 x1 < x2, y1 < y2
+                ix1, iy1, ix2, iy2 = int(round(new_x1)), int(round(new_y1)), int(round(new_x2)), int(round(new_y2))
 
-                # 重绘选框
+                # 更新变量
+                x1_var.set(str(ix1))
+                y1_var.set(str(iy1))
+                x2_var.set(str(ix2))
+                y2_var.set(str(iy2))
+
+                # ⚠️ 关键：强制刷新 UI 变量并重绘
+                ratio_handler.dialog.dialog.update_idletasks()  # 确保变量生效
                 draw_selection_box_func()
                 update_size_label_func()
 

@@ -636,11 +636,13 @@ class CropDialog:
                 self.original_ratio = None
                 self.current_ratio = None
         else:
+            # 切换到预设比例时，清除现有裁剪框
             self.current_ratio = self.aspect_ratios.get(value)
         
         self.update_ratio_display()
         
-        if self.current_rect:
+        # 只在选择预设比例（非锁定、非原始）时清除裁剪框
+        if self.current_rect and value not in ["lock", "original"]:
             self.clear_selection()
     
     def fit_to_window(self):

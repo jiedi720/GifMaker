@@ -93,8 +93,8 @@ def on_file_selected(main_window_instance, event):
             # 只更新选中框，不重新绘制整个网格（避免闪烁）
             main_window_instance.draw_selection_boxes()
             
-            # 滚动到选中的图片
-            main_window_instance.scroll_to_image(current_selection)
+            # 滚动到选中的图片（已禁用，避免图片移动）
+            # main_window_instance.scroll_to_image(current_selection)
 
             # 更新状态信息
             update_status_info(main_window_instance)

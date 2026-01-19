@@ -42,10 +42,9 @@ def show_image_properties(main_window_instance, index):
             info_text = f"""图片属性:
 
 文件名: {os.path.basename(img_path)}
-路径: {img_path}
+路径: {img_path.replace('\\', '/')}
 尺寸: {width} x {height} 像素
 格式: {img.format}
-模式: {img.mode}
 文件大小: {size_kb:.2f} KB"""
 
             messagebox.showinfo("图片属性", info_text)

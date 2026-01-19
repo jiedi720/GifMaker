@@ -244,68 +244,45 @@ class GUIBuilder:
         )
         preview_group.pack(fill="x", pady=(0, 15), ipadx=10)
         
-        # 创建导航按钮容器
+        # 创建导航按钮容器（垂直排列）
         nav_container = ttk.Frame(preview_group)
         nav_container.pack(fill="x", pady=5)
         
-        # 裁剪预览按钮（宽度与四个导航按钮总宽度一致）
+        # --- 第一行：预览按钮 (独占一行，fill="x" 确保与下面对齐) ---
+        preview_row = ttk.Frame(nav_container)
+        preview_row.pack(fill="x")
+        
         self.widgets['preview_crop_btn'] = ttk.Button(
-            nav_container, 
+            preview_row, 
             text="👁️", 
-            command=self.callbacks['preview_crop'],
-            width=23
+            command=self.callbacks['preview_crop']
         )
-        self.widgets['preview_crop_btn'].grid(row=0, column=0, columnspan=4, sticky="ew", pady=5)
-        # 添加鼠标悬浮提示
+        # expand=True 让它占据整行剩余空间，fill="x" 让它拉伸到满
+        self.widgets['preview_crop_btn'].pack(side="left", padx=5, pady=2, fill="x", expand=True)
         self.create_tooltip(self.widgets['preview_crop_btn'], "裁剪预览")
         
-        # 图片导航按钮行
+        # --- 第二行：四个导航按钮 (四人平分一行) ---
         nav_row = ttk.Frame(nav_container)
-        nav_row.grid(row=1, column=0, columnspan=4, sticky="ew")
+        nav_row.pack(fill="x")
         
-        # 第一张按钮
-        self.widgets['first_btn'] = ttk.Button(
-            nav_row, 
-            text="⏮️", 
-            command=lambda: self.callbacks['navigate_image']('first'),
-            width=5
-        )
-        self.widgets['first_btn'].pack(side="left", padx=2)
-        # 添加鼠标悬浮提示
-        self.create_tooltip(self.widgets['first_btn'], "第一张")
+        nav_configs = [
+            ('first_btn', "⏮️", 'first', "第一张"),
+            ('prev_btn', "◀️", 'prev', "上一张"),
+            ('next_btn', "▶️", 'next', "下一张"),
+            ('last_btn', "⏭️", 'last', "最后一张")
+        ]
         
-        # 上一张按钮
-        self.widgets['prev_btn'] = ttk.Button(
-            nav_row, 
-            text="◀️", 
-            command=lambda: self.callbacks['navigate_image']('prev'),
-            width=5
-        )
-        self.widgets['prev_btn'].pack(side="left", padx=2)
-        # 添加鼠标悬浮提示
-        self.create_tooltip(self.widgets['prev_btn'], "上一张")
-        
-        # 下一张按钮
-        self.widgets['next_btn'] = ttk.Button(
-            nav_row, 
-            text="▶️", 
-            command=lambda: self.callbacks['navigate_image']('next'),
-            width=5
-        )
-        self.widgets['next_btn'].pack(side="left", padx=2)
-        # 添加鼠标悬浮提示
-        self.create_tooltip(self.widgets['next_btn'], "下一张")
-        
-        # 最后一张按钮
-        self.widgets['last_btn'] = ttk.Button(
-            nav_row, 
-            text="⏭️", 
-            command=lambda: self.callbacks['navigate_image']('last'),
-            width=5
-        )
-        self.widgets['last_btn'].pack(side="left", padx=2)
-        # 添加鼠标悬浮提示
-        self.create_tooltip(self.widgets['last_btn'], "最后一张")
+        for key, icon, action, tip in nav_configs:
+            self.widgets[key] = ttk.Button(
+                nav_row, 
+                text=icon, 
+                width=2, # 限制字符宽度
+                command=lambda a=action: self.callbacks['navigate_image'](a)
+            )
+            # 关键点：所有按钮都设 expand=True，它们会平分父容器宽度
+            # padx=5 保持与上方预览按钮及其他功能按钮一致的间距
+            self.widgets[key].pack(side="left", padx=5, pady=2, fill="x", expand=True)
+            self.create_tooltip(self.widgets[key], tip)
         
         # 当前图片显示标签
         self.widgets['current_img_label'] = ttk.Label(

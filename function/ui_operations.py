@@ -149,7 +149,9 @@ def enter_crop_mode(main_window_instance):
             target_paths = [main_window_instance.image_paths[i] for i in target_indices]
 
             from function.image_utils import find_smallest_image_path
-            current_image_path, current_index = find_smallest_image_path(target_paths, main_window_instance.image_paths)
+            current_image_path, _ = find_smallest_image_path(target_paths, main_window_instance.image_paths)
+            # current_index 应该是当前图片在 target_paths 中的索引
+            current_index = target_paths.index(current_image_path)
         else:
 
             current_selection = main_window_instance.file_combobox.current()

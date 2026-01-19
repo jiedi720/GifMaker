@@ -182,7 +182,7 @@ class GifMakerGUI:
         file_menu.add_command(label="选择图片", command=lambda: select_images(self))
         file_menu.add_command(label="选择目录", command=lambda: select_directory(self))
         file_menu.add_separator()
-        file_menu.add_command(label="设置输出文件...", command=self.browse_output, accelerator="Alt+O")
+        file_menu.add_command(label="设置输出文件...", command=self.browse_output)
         file_menu.add_separator()
         file_menu.add_command(label="退出", command=self.root.quit)
 
@@ -191,9 +191,6 @@ class GifMakerGUI:
         menubar.add_cascade(label="帮助", menu=help_menu)
         help_menu.add_command(label="关于", command=self.show_about)
 
-        # 绑定快捷键
-        from function.ui_operations import browse_output
-        self.root.bind('<Alt-o>', lambda e: browse_output(self))
 
     def show_about(self):
         """显示关于对话框，显示应用程序的基本信息和功能说明"""
@@ -370,6 +367,7 @@ class GifMakerGUI:
         self.preview_canvas.bind("<ButtonPress-1>", self.on_preview_left_click)
         self.preview_canvas.bind("<B1-Motion>", self.on_preview_drag)
         self.preview_canvas.bind("<ButtonRelease-1>", self.on_preview_release)
+        self.preview_canvas.bind("<Double-Button-1>", self.on_preview_double_click)
 
         # 状态栏
         self.status_frame = ttk.Frame(main_frame)
@@ -515,7 +513,12 @@ class GifMakerGUI:
 
         # 更新文件列表下拉框（仅在需要时更新）
         if update_combobox and self.image_paths:
-            file_names = [os.path.basename(p) for p in self.image_paths]
+            # 在文件名前添加编号，格式为 "#01: filename"
+            file_names = []
+            for i, path in enumerate(self.image_paths):
+                filename = os.path.basename(path)
+                numbered_filename = f"#{i+1:02d}: {filename}"
+                file_names.append(numbered_filename)
             self.file_combobox['values'] = file_names
             if self.selected_image_index >= 0 and self.selected_image_index < len(file_names):
                 self.file_combobox.current(self.selected_image_index)
@@ -722,6 +725,20 @@ class GifMakerGUI:
         # 确保选中框在最上层
         self.preview_canvas.tag_raise("selection_box")
 
+    def on_preview_double_click(self, event):
+        """处理预览区域双击事件，用默认程序打开图片"""
+        # 获取点击位置
+        click_x = self.preview_canvas.canvasx(event.x)
+        click_y = self.preview_canvas.canvasy(event.y)
+
+        # 检查是否双击了某张图片
+        for i, rect in enumerate(self.image_rects):
+            if rect['x1'] <= click_x <= rect['x2'] and rect['y1'] <= click_y <= rect['y2']:
+                # 用默认程序打开图片
+                from function.list_operations import open_with_default_viewer
+                open_with_default_viewer(self, i)
+                return
+
     def on_preview_left_click(self, event):
         """处理预览区域左键点击事件，用于选择和拖拽图片"""
         # 获取点击位置
@@ -836,7 +853,7 @@ class GifMakerGUI:
                         x, y - icon_size // 2 - 30,  # 增加间距
                         text=display_name,
                         font=("Arial", 10, "bold"),  # 使用粗体提高可读性
-                        fill="#000000",  # 使用纯黑色
+                        fill="#FF0000",  # 使用红色
                         tags="drag_preview"
                     )
             else:
@@ -873,7 +890,7 @@ class GifMakerGUI:
                     x, y - icon_size // 2 - 30,  # 增加间距
                     text=display_name,
                     font=("Arial", 10, "bold"),  # 使用粗体提高可读性
-                    fill="#000000",  # 使用纯黑色
+                    fill="#FF0000",  # 使用红色
                     tags="drag_preview"
                 )
 

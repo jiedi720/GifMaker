@@ -50,12 +50,24 @@ a = Analysis(
     datas=[
         # Include project directories
         ('gui', 'gui'),
+        ('function', 'function'),
         ('icons', 'icons'),
     ] + pil_datas,
     hiddenimports=[
         # Project modules
         'gui.main_window',
         'gui.preview',
+        'gui.crop_gui',
+        'gui.gifpreview_gui',
+        'function.file_manager',
+        'function.image_utils',
+        'function.crop_backup',
+        'function.history_manager',
+        'function.gif_operations',
+        'function.list_operations',
+        'function.preview',
+        'function.ui_operations',
+        'function.photo_cropper',
         # PIL related modules
     ] + pil_hiddenimports,
     hookspath=[],
@@ -63,7 +75,6 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         # Exclude unnecessary modules to reduce size
-        'tkinter',
         'matplotlib',
         'pandas',
         'scipy',

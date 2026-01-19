@@ -254,7 +254,7 @@ class GUIBuilder:
         
         self.widgets['preview_crop_btn'] = ttk.Button(
             preview_row, 
-            text="👁️", 
+            text="裁剪预览", 
             command=self.callbacks['preview_crop']
         )
         # expand=True 让它占据整行剩余空间，fill="x" 让它拉伸到满
@@ -266,10 +266,10 @@ class GUIBuilder:
         nav_row.pack(fill="x")
         
         nav_configs = [
-            ('first_btn', "⏮️", 'first', "第一张"),
-            ('prev_btn', "◀️", 'prev', "上一张"),
-            ('next_btn', "▶️", 'next', "下一张"),
-            ('last_btn', "⏭️", 'last', "最后一张")
+            ('first_btn', "⏮", 'first', "第一张"),
+            ('prev_btn', "⏴", 'prev', "上一张"),
+            ('next_btn', "⏵", 'next', "下一张"),
+            ('last_btn', "⏭", 'last', "最后一张")
         ]
         
         for key, icon, action, tip in nav_configs:

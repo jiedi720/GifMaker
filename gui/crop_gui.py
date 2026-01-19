@@ -574,17 +574,16 @@ class CropDialog:
         if hasattr(self, '_saved_selection_for_navigation'):
             # 这是导航操作，保留选择框
             saved_data = self._saved_selection_for_navigation
-            was_in_preview = saved_data['was_in_preview']
-            saved_coords = saved_data.get('coords')
 
             # 删除临时存储的数据
             del self._saved_selection_for_navigation
 
-            # 如果之前有预览模式，现在恢复它
-            if was_in_preview and saved_coords:
-                # 重新创建选择框（使用相对坐标）
-                self._restore_selection_from_saved(saved_coords)
+            # 恢复选择框
+            self._restore_selection_from_saved(saved_data)
 
+            # 如果之前有预览模式，现在恢复它
+            was_in_preview = saved_data.get('was_in_preview', False)
+            if was_in_preview:
                 # 延迟进入预览模式，确保图片和选择框都已加载完成
                 self.dialog.after(100, self.enter_preview_mode)
         else:
@@ -597,58 +596,42 @@ class CropDialog:
         # 更新导航按钮状态
         self.update_navigation_buttons()
     
-    def _restore_selection_from_saved(self, saved_coords):
-        """从保存的坐标恢复选择框"""
-        if not saved_coords or not self.original_image:
+    def _restore_selection_from_saved(self, saved_data):
+        """从保存的坐标恢复选择框，保持原始图片上的绝对像素坐标不变"""
+        if not saved_data or not self.original_image:
             return
 
-        # 计算原始图片的尺寸
-        orig_img_width, orig_img_height = self.original_image.size
+        # 获取当前图片的尺寸
+        curr_img_width, curr_img_height = self.original_image.size
 
-        # 如果之前的选择框坐标是基于原始图片的，我们需要计算相对位置
-        # 但首先需要确定保存的坐标是哪种类型
-        # 如果是基于显示图片的坐标，需要先转换为原始图片坐标
-        if self.display_image:
-            x1_orig, y1_orig, x2_orig, y2_orig = saved_coords
-
-            # 将显示坐标转换为原始图片坐标
-            orig_x1 = int(x1_orig / self.scale_factor) if self.scale_factor > 0 else 0
-            orig_y1 = int(y1_orig / self.scale_factor) if self.scale_factor > 0 else 0
-            orig_x2 = int(x2_orig / self.scale_factor) if self.scale_factor > 0 else 0
-            orig_y2 = int(y2_orig / self.scale_factor) if self.scale_factor > 0 else 0
-
-            # 限制在原始图片范围内
-            orig_x1 = max(0, min(orig_x1, orig_img_width))
-            orig_y1 = max(0, min(orig_y1, orig_img_height))
-            orig_x2 = max(0, min(orig_x2, orig_img_width))
-            orig_y2 = max(0, min(orig_y2, orig_img_height))
-
-            # 计算相对位置（百分比）
-            rel_x1 = orig_x1 / orig_img_width if orig_img_width > 0 else 0
-            rel_y1 = orig_y1 / orig_img_height if orig_img_height > 0 else 0
-            rel_x2 = orig_x2 / orig_img_width if orig_img_width > 0 else 0
-            rel_y2 = orig_y2 / orig_img_height if orig_img_height > 0 else 0
+        # 检查是否有原始图片坐标
+        if 'orig_coords' in saved_data:
+            # 使用原始图片坐标
+            orig_x1, orig_y1, orig_x2, orig_y2 = saved_data['orig_coords']
         else:
-            # 如果没有显示图片，使用默认值
-            rel_x1, rel_y1, rel_x2, rel_y2 = 0.25, 0.25, 0.75, 0.75  # 默认中间区域
+            # 如果没有原始图片坐标，尝试从画布坐标转换
+            canvas_coords = saved_data.get('canvas_coords')
+            if not canvas_coords:
+                return
+            x1_canvas, y1_canvas, x2_canvas, y2_canvas = canvas_coords
 
-        # 根据新图片的尺寸计算新坐标
-        new_x1 = int(rel_x1 * orig_img_width)
-        new_y1 = int(rel_y1 * orig_img_height)
-        new_x2 = int(rel_x2 * orig_img_width)
-        new_y2 = int(rel_y2 * orig_img_height)
+            # 将画布坐标转换为原始图片坐标
+            orig_x1 = int(x1_canvas / self.scale_factor) if self.scale_factor > 0 else 0
+            orig_y1 = int(y1_canvas / self.scale_factor) if self.scale_factor > 0 else 0
+            orig_x2 = int(x2_canvas / self.scale_factor) if self.scale_factor > 0 else 0
+            orig_y2 = int(y2_canvas / self.scale_factor) if self.scale_factor > 0 else 0
 
-        # 限制坐标在图片范围内
-        new_x1 = max(0, min(new_x1, orig_img_width))
-        new_y1 = max(0, min(new_y1, orig_img_height))
-        new_x2 = max(0, min(new_x2, orig_img_width))
-        new_y2 = max(0, min(new_y2, orig_img_height))
+        # 限制在当前图片范围内
+        orig_x1 = max(0, min(orig_x1, curr_img_width))
+        orig_y1 = max(0, min(orig_y1, curr_img_height))
+        orig_x2 = max(0, min(orig_x2, curr_img_width))
+        orig_y2 = max(0, min(orig_y2, curr_img_height))
 
-        # 计算在当前显示比例下的坐标
-        new_scaled_x1 = int(new_x1 * self.scale_factor)
-        new_scaled_y1 = int(new_y1 * self.scale_factor)
-        new_scaled_x2 = int(new_x2 * self.scale_factor)
-        new_scaled_y2 = int(new_y2 * self.scale_factor)
+        # 将原始图片坐标转换为当前显示比例下的画布坐标
+        new_canvas_x1 = int(orig_x1 * self.scale_factor)
+        new_canvas_y1 = int(orig_y1 * self.scale_factor)
+        new_canvas_x2 = int(orig_x2 * self.scale_factor)
+        new_canvas_y2 = int(orig_y2 * self.scale_factor)
 
         # 创建新选择框
         canvas = self.gui.get_widget('canvas')
@@ -657,7 +640,7 @@ class CropDialog:
         self.clear_handles()
 
         self.current_rect = canvas.create_rectangle(
-            new_scaled_x1, new_scaled_y1, new_scaled_x2, new_scaled_y2,
+            new_canvas_x1, new_canvas_y1, new_canvas_x2, new_canvas_y2,
             outline="red",
             width=2,
             dash=(5, 5),
@@ -665,8 +648,8 @@ class CropDialog:
         )
 
         # 保存新选择框坐标
-        self.selection_coords = (new_scaled_x1, new_scaled_y1, new_scaled_x2, new_scaled_y2)
-        self.draw_handles(new_scaled_x1, new_scaled_y1, new_scaled_x2, new_scaled_y2)
+        self.selection_coords = (new_canvas_x1, new_canvas_y1, new_canvas_x2, new_canvas_y2)
+        self.draw_handles(new_canvas_x1, new_canvas_y1, new_canvas_x2, new_canvas_y2)
         self.update_size_label()
 
     def update_current_image_label(self):
@@ -715,10 +698,23 @@ class CropDialog:
                 self.update_current_image_label()
 
                 # 在加载新图片前，保存当前的选择框信息
-                self._saved_selection_for_navigation = {
-                    'coords': self.selection_coords,
+                # 同时保存画布坐标和原始图片坐标
+                saved_info = {
+                    'canvas_coords': self.selection_coords,
                     'was_in_preview': was_in_preview_mode
                 }
+
+                # 如果有选择框，计算原始图片坐标
+                if self.selection_coords and self.original_image and self.scale_factor > 0:
+                    x1, y1, x2, y2 = self.selection_coords
+                    # 将画布坐标转换为原始图片坐标
+                    orig_x1 = int(x1 / self.scale_factor)
+                    orig_y1 = int(y1 / self.scale_factor)
+                    orig_x2 = int(x2 / self.scale_factor)
+                    orig_y2 = int(y2 / self.scale_factor)
+                    saved_info['orig_coords'] = (orig_x1, orig_y1, orig_x2, orig_y2)
+
+                self._saved_selection_for_navigation = saved_info
 
                 self.load_image(self.image_paths[self.current_image_index])
 

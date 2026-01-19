@@ -363,6 +363,8 @@ class GifMakerGUI:
         self.drag_preview_photo = None  # 拖拽预览PhotoImage
         self.insert_cursor = None  # 插入光标
         self.insert_index = -1  # 插入位置索引
+        self.drag_threshold = 10  # 拖动阈值（像素），只有移动超过这个距离才进入拖动模式
+        self.is_dragging = False  # 是否已经进入拖动模式
 
         # 绑定鼠标拖拽事件
         self.preview_canvas.bind("<ButtonPress-1>", self.on_preview_left_click)
@@ -768,10 +770,11 @@ class GifMakerGUI:
                 self.selected_image_index = i
                 self.file_combobox.current(i)
 
-                # 开始拖拽
+                # 记录拖拽起始位置，但不立即进入拖动模式
                 self.dragging_image_index = i
                 self.drag_source_index = i
                 self.drag_start_pos = (click_x, click_y)
+                self.is_dragging = False  # 重置拖动标志
 
                 # 更新选中框显示
                 self.draw_selection_boxes()
@@ -783,6 +786,7 @@ class GifMakerGUI:
         # 点击空白区域，清除选择
         self.dragging_image_index = -1
         self.drag_source_index = -1
+        self.is_dragging = False
         self.selected_image_index = -1
         self.selected_image_indices = set()
         self.draw_selection_boxes()
@@ -870,6 +874,23 @@ class GifMakerGUI:
             # 获取拖拽位置
             drag_x = self.preview_canvas.canvasx(event.x)
             drag_y = self.preview_canvas.canvasy(event.y)
+
+            # 如果还没有进入拖动模式，检查是否超过阈值
+            if not self.is_dragging:
+                if self.drag_start_pos:
+                    # 计算移动距离
+                    dx = drag_x - self.drag_start_pos[0]
+                    dy = drag_y - self.drag_start_pos[1]
+                    distance = (dx ** 2 + dy ** 2) ** 0.5
+
+                    # 如果移动距离超过阈值，进入拖动模式
+                    if distance >= self.drag_threshold:
+                        self.is_dragging = True
+                    else:
+                        # 未超过阈值，不执行拖动
+                        return
+                else:
+                    return
 
             # 如果还没有创建拖拽预览，则创建
             if not self.preview_canvas.find_withtag("drag_preview"):
@@ -1017,67 +1038,69 @@ class GifMakerGUI:
             return
 
         try:
-            # 如果有有效的插入位置，执行移动操作
-            if self.insert_index >= 0 and self.insert_index != self.drag_source_index:
-                # 保存当前状态到历史记录
-                from function.history_manager import save_state
-                save_state(self)
+            # 只有在进入拖动模式后才执行移动操作
+            if self.is_dragging:
+                # 如果有有效的插入位置，执行移动操作
+                if self.insert_index >= 0 and self.insert_index != self.drag_source_index:
+                    # 保存当前状态到历史记录
+                    from function.history_manager import save_state
+                    save_state(self)
 
-                # 检查是否是多选拖拽
-                if len(self.selected_image_indices) > 1:
-                    # 多选拖拽：移动所有选中的图片
-                    # 1. 获取所有选中的索引，按升序排序
-                    sorted_selected_indices = sorted(self.selected_image_indices)
-                    
-                    # 2. 计算插入位置的调整值
-                    # 如果插入位置在源索引之后，需要减去已移除的图片数量
-                    remove_count = 0
-                    adjusted_insert_index = self.insert_index
-                    
-                    # 3. 收集所有要移动的图片路径
-                    images_to_move = []
-                    for idx in sorted_selected_indices:
-                        if idx < self.insert_index:
-                            remove_count += 1
-                        images_to_move.append(self.image_paths[idx])
-                    
-                    # 4. 从原位置移除图片（从后往前移除，避免索引混乱）
-                    for idx in reversed(sorted_selected_indices):
-                        self.image_paths.pop(idx)
-                    
-                    # 5. 调整插入索引
-                    if self.insert_index > sorted_selected_indices[-1]:
-                        adjusted_insert_index = self.insert_index - len(sorted_selected_indices)
-                    elif self.insert_index > sorted_selected_indices[0]:
-                        adjusted_insert_index = self.insert_index - sum(1 for idx in sorted_selected_indices if idx < self.insert_index)
-                    
-                    # 6. 插入图片到新位置
-                    for i, img_path in enumerate(images_to_move):
-                        self.image_paths.insert(adjusted_insert_index + i, img_path)
-                    
-                    # 7. 更新选中索引
-                    new_selected_indices = set(range(adjusted_insert_index, adjusted_insert_index + len(images_to_move)))
-                    self.selected_image_indices = new_selected_indices
-                    # 选中第一个移动的图片作为当前选中索引
-                    self.selected_image_index = adjusted_insert_index
-                else:
-                    # 单选拖拽：移动单个图片
-                    # 调整插入索引（因为删除源图片后索引会变化）
-                    if self.insert_index > self.drag_source_index:
-                        adjusted_insert_index = self.insert_index - 1
-                    else:
+                    # 检查是否是多选拖拽
+                    if len(self.selected_image_indices) > 1:
+                        # 多选拖拽：移动所有选中的图片
+                        # 1. 获取所有选中的索引，按升序排序
+                        sorted_selected_indices = sorted(self.selected_image_indices)
+                        
+                        # 2. 计算插入位置的调整值
+                        # 如果插入位置在源索引之后，需要减去已移除的图片数量
+                        remove_count = 0
                         adjusted_insert_index = self.insert_index
+                        
+                        # 3. 收集所有要移动的图片路径
+                        images_to_move = []
+                        for idx in sorted_selected_indices:
+                            if idx < self.insert_index:
+                                remove_count += 1
+                            images_to_move.append(self.image_paths[idx])
+                        
+                        # 4. 从原位置移除图片（从后往前移除，避免索引混乱）
+                        for idx in reversed(sorted_selected_indices):
+                            self.image_paths.pop(idx)
+                        
+                        # 5. 调整插入索引
+                        if self.insert_index > sorted_selected_indices[-1]:
+                            adjusted_insert_index = self.insert_index - len(sorted_selected_indices)
+                        elif self.insert_index > sorted_selected_indices[0]:
+                            adjusted_insert_index = self.insert_index - sum(1 for idx in sorted_selected_indices if idx < self.insert_index)
+                        
+                        # 6. 插入图片到新位置
+                        for i, img_path in enumerate(images_to_move):
+                            self.image_paths.insert(adjusted_insert_index + i, img_path)
+                        
+                        # 7. 更新选中索引
+                        new_selected_indices = set(range(adjusted_insert_index, adjusted_insert_index + len(images_to_move)))
+                        self.selected_image_indices = new_selected_indices
+                        # 选中第一个移动的图片作为当前选中索引
+                        self.selected_image_index = adjusted_insert_index
+                    else:
+                        # 单选拖拽：移动单个图片
+                        # 调整插入索引（因为删除源图片后索引会变化）
+                        if self.insert_index > self.drag_source_index:
+                            adjusted_insert_index = self.insert_index - 1
+                        else:
+                            adjusted_insert_index = self.insert_index
 
-                    # 执行移动操作
-                    source_path = self.image_paths.pop(self.drag_source_index)
-                    self.image_paths.insert(adjusted_insert_index, source_path)
+                        # 执行移动操作
+                        source_path = self.image_paths.pop(self.drag_source_index)
+                        self.image_paths.insert(adjusted_insert_index, source_path)
 
-                    # 更新选中索引
-                    self.selected_image_index = adjusted_insert_index
-                    self.selected_image_indices = {adjusted_insert_index}
+                        # 更新选中索引
+                        self.selected_image_index = adjusted_insert_index
+                        self.selected_image_indices = {adjusted_insert_index}
 
-                # 更新UI（不重新绘制整个网格，只更新必要部分）
-                self.update_image_positions()
+                    # 更新UI（不重新绘制整个网格，只更新必要部分）
+                    self.update_image_positions()
 
         except Exception as e:
             print(f"释放失败: {e}")
@@ -1088,6 +1111,7 @@ class GifMakerGUI:
             self.dragging_image_index = -1
             self.drag_source_index = -1
             self.drag_start_pos = None
+            self.is_dragging = False  # 重置拖动标志
             self.drag_preview_image = None
             self.drag_preview_photo = None
             self.insert_index = -1

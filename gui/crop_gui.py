@@ -244,41 +244,68 @@ class GUIBuilder:
         )
         preview_group.pack(fill="x", pady=(0, 15), ipadx=10)
         
-        # 裁剪预览按钮
+        # 创建导航按钮容器
+        nav_container = ttk.Frame(preview_group)
+        nav_container.pack(fill="x", pady=5)
+        
+        # 裁剪预览按钮（宽度与四个导航按钮总宽度一致）
         self.widgets['preview_crop_btn'] = ttk.Button(
-            preview_group, 
-            text="👁️ 裁剪预览", 
-            command=self.callbacks['preview_crop']
+            nav_container, 
+            text="👁️", 
+            command=self.callbacks['preview_crop'],
+            width=23
         )
-        self.widgets['preview_crop_btn'].pack(fill="x", pady=5)
+        self.widgets['preview_crop_btn'].grid(row=0, column=0, columnspan=4, sticky="ew", pady=5)
+        # 添加鼠标悬浮提示
+        self.create_tooltip(self.widgets['preview_crop_btn'], "裁剪预览")
         
         # 图片导航按钮行
-        nav_row = ttk.Frame(preview_group)
-        nav_row.pack(fill="x", pady=(5, 0))
+        nav_row = ttk.Frame(nav_container)
+        nav_row.grid(row=1, column=0, columnspan=4, sticky="ew")
         
         # 第一张按钮
         self.widgets['first_btn'] = ttk.Button(
             nav_row, 
-            text="⏮️ 第一张", 
-            command=lambda: self.callbacks['navigate_image']('first')
+            text="⏮️", 
+            command=lambda: self.callbacks['navigate_image']('first'),
+            width=5
         )
-        self.widgets['first_btn'].pack(side="left", padx=2, fill="x", expand=True)
+        self.widgets['first_btn'].pack(side="left", padx=2)
+        # 添加鼠标悬浮提示
+        self.create_tooltip(self.widgets['first_btn'], "第一张")
         
         # 上一张按钮
         self.widgets['prev_btn'] = ttk.Button(
             nav_row, 
-            text="◀️ 上一张", 
-            command=lambda: self.callbacks['navigate_image']('prev')
+            text="◀️", 
+            command=lambda: self.callbacks['navigate_image']('prev'),
+            width=5
         )
-        self.widgets['prev_btn'].pack(side="left", padx=2, fill="x", expand=True)
+        self.widgets['prev_btn'].pack(side="left", padx=2)
+        # 添加鼠标悬浮提示
+        self.create_tooltip(self.widgets['prev_btn'], "上一张")
         
         # 下一张按钮
         self.widgets['next_btn'] = ttk.Button(
             nav_row, 
-            text="▶️ 下一张", 
-            command=lambda: self.callbacks['navigate_image']('next')
+            text="▶️", 
+            command=lambda: self.callbacks['navigate_image']('next'),
+            width=5
         )
-        self.widgets['next_btn'].pack(side="left", padx=2, fill="x", expand=True)
+        self.widgets['next_btn'].pack(side="left", padx=2)
+        # 添加鼠标悬浮提示
+        self.create_tooltip(self.widgets['next_btn'], "下一张")
+        
+        # 最后一张按钮
+        self.widgets['last_btn'] = ttk.Button(
+            nav_row, 
+            text="⏭️", 
+            command=lambda: self.callbacks['navigate_image']('last'),
+            width=5
+        )
+        self.widgets['last_btn'].pack(side="left", padx=2)
+        # 添加鼠标悬浮提示
+        self.create_tooltip(self.widgets['last_btn'], "最后一张")
         
         # 当前图片显示标签
         self.widgets['current_img_label'] = ttk.Label(
@@ -303,18 +330,22 @@ class GUIBuilder:
         # 适应窗口按钮
         self.widgets['fit_btn'] = ttk.Button(
             zoom_row, 
-            text="⬜ 适应窗口", 
+            text="⬜", 
             command=self.callbacks['fit_to_window']
         )
         self.widgets['fit_btn'].pack(side="left", padx=5, fill="x", expand=True)
+        # 添加鼠标悬浮提示
+        self.create_tooltip(self.widgets['fit_btn'], "适应窗口")
         
         # 原始大小按钮
         self.widgets['original_btn'] = ttk.Button(
             zoom_row, 
-            text="🔄 原始大小", 
+            text="🔄", 
             command=self.callbacks['original_size']
         )
         self.widgets['original_btn'].pack(side="left", padx=5, fill="x", expand=True)
+        # 添加鼠标悬浮提示
+        self.create_tooltip(self.widgets['original_btn'], "原始大小")
         
         # 操作按钮行
         btn_row = ttk.Frame(self.widgets['modules_container'])
@@ -323,18 +354,12 @@ class GUIBuilder:
         # 确认裁剪按钮
         self.widgets['crop_btn'] = ttk.Button(
             btn_row, 
-            text="✅ 确认裁剪", 
+            text="✅", 
             command=self.callbacks['confirm_crop']
         )
         self.widgets['crop_btn'].pack(side="left", padx=5, fill="x", expand=True)
-        
-        # 保存按钮
-        self.widgets['save_btn'] = ttk.Button(
-            btn_row, 
-            text="💾 保存结果", 
-            command=self.callbacks['save_cropped_image']
-        )
-        self.widgets['save_btn'].pack(side="left", padx=5, fill="x", expand=True)
+        # 添加鼠标悬浮提示
+        self.create_tooltip(self.widgets['crop_btn'], "确认裁剪")
     
     
     
@@ -359,6 +384,41 @@ class GUIBuilder:
             Tkinter组件对象，如果不存在则返回None
         """
         return self.widgets.get(name)
+    
+    def create_tooltip(self, widget, text):
+        """
+        为组件创建鼠标悬浮提示
+        
+        Args:
+            widget: Tkinter组件
+            text: 提示文本
+        """
+        tooltip = tk.Toplevel(widget)
+        tooltip.wm_overrideredirect(True)
+        tooltip.wm_geometry(f"+0+0")
+        tooltip.withdraw()
+        
+        label = tk.Label(
+            tooltip,
+            text=text,
+            background="#FFFFE0",
+            relief="solid",
+            borderwidth=1,
+            font=("Microsoft YaHei UI", 9)
+        )
+        label.pack()
+        
+        def show_tooltip(event):
+            x = widget.winfo_rootx() + event.x + 10
+            y = widget.winfo_rooty() + event.y + 10
+            tooltip.wm_geometry(f"+{x}+{y}")
+            tooltip.deiconify()
+        
+        def hide_tooltip(event):
+            tooltip.withdraw()
+        
+        widget.bind("<Enter>", show_tooltip)
+        widget.bind("<Leave>", hide_tooltip)
 
 
 class CropDialog:
@@ -439,6 +499,10 @@ class CropDialog:
         # 图片导航相关变量
         self.current_image_index = current_index  # 当前图片索引
         self.image_paths = image_paths  # 所有图片路径
+        
+        # 预览模式相关变量
+        self.is_preview_mode = False  # 是否处于预览模式
+        self.preview_bind_id = None  # 预览点击事件绑定ID
         
         # 创建GUI界面
         self.setup_gui()
@@ -536,9 +600,13 @@ class CropDialog:
             self.current_image_index = max(0, self.current_image_index - 1)
         elif direction == 'next':
             self.current_image_index = min(len(self.image_paths) - 1, self.current_image_index + 1)
+        elif direction == 'last':
+            self.current_image_index = len(self.image_paths) - 1
         
         # 如果索引改变了，加载新图片
         if old_index != self.current_image_index:
+            # 立即更新当前图片标签显示
+            self.update_current_image_label()
             self.load_image(self.image_paths[self.current_image_index])
     
     def preview_crop(self):
@@ -559,6 +627,9 @@ class CropDialog:
             img_y1, img_y2 = min(img_y1, img_y2), max(img_y1, img_y2)
             
             cropped_image = self.original_image.crop((img_x1, img_y1, img_x2, img_y2))
+            
+            # 设置预览模式标志
+            self.is_preview_mode = True
             
             # 在原图上显示裁剪预览
             self.show_crop_on_canvas(cropped_image, x1, y1, x2, y2)
@@ -659,8 +730,8 @@ class CropDialog:
             tags="preview_text"
         )
         
-        # 绑定点击事件来关闭预览
-        canvas.bind("<Button-1>", self.close_preview, add="+")
+        # 绑定点击事件来关闭预览，并保存绑定ID
+        self.preview_bind_id = canvas.bind("<Button-1>", self.close_preview, add="+")
     
     def close_preview(self, event=None):
         """关闭预览"""
@@ -670,8 +741,37 @@ class CropDialog:
         canvas.delete("preview_image")
         canvas.delete("preview_text")
         
+        # 清除预览模式标志
+        self.is_preview_mode = False
+        
         # 解绑点击事件
-        canvas.unbind("<Button-1>", self.close_preview)
+        if self.preview_bind_id:
+            canvas.unbind("<Button-1>", self.preview_bind_id)
+            self.preview_bind_id = None
+    
+    def update_preview(self):
+        """更新预览 - 在移动或调整裁剪框时实时更新预览"""
+        if not self.original_image or not self.selection_coords:
+            return
+        
+        try:
+            x1, y1, x2, y2 = self.selection_coords
+            
+            img_x1 = (x1 - self.image_offset_x) / self.scale_factor
+            img_y1 = (y1 - self.image_offset_y) / self.scale_factor
+            img_x2 = (x2 - self.image_offset_x) / self.scale_factor
+            img_y2 = (y2 - self.image_offset_y) / self.scale_factor
+            
+            img_x1, img_x2 = min(img_x1, img_x2), max(img_x1, img_x2)
+            img_y1, img_y2 = min(img_y1, img_y2), max(img_y1, img_y2)
+            
+            cropped_image = self.original_image.crop((img_x1, img_y1, img_x2, img_y2))
+            
+            # 更新预览显示
+            self.show_crop_on_canvas(cropped_image, x1, y1, x2, y2)
+            
+        except Exception as e:
+            pass  # 静默处理错误，避免在拖动时弹出错误窗口
     
     def calculate_scale_and_display(self):
         """计算缩放比例并在画布上显示图像"""
@@ -958,6 +1058,11 @@ class CropDialog:
         if not self.original_image:
             return
         
+        # 如果处于预览模式，点击任意位置关闭预览
+        if self.is_preview_mode:
+            self.close_preview()
+            return
+        
         handle = self.get_handle_at_position(event.x, event.y)
         if handle:
             self.dragging_handle = handle
@@ -1055,6 +1160,10 @@ class CropDialog:
         self.selection_coords = (x1, y1, x2, y2)
         self.draw_handles(x1, y1, x2, y2)
         self.update_size_label()
+        
+        # 如果处于预览模式，更新预览
+        if self.is_preview_mode:
+            self.update_preview()
     
     def move_selection_box(self, current_x, current_y):
         """移动现有的裁剪框"""
@@ -1104,6 +1213,10 @@ class CropDialog:
         self.drag_offset_y = self.drag_offset_y + actual_dy
         
         self.update_size_label()
+        
+        # 如果处于预览模式，更新预览
+        if self.is_preview_mode:
+            self.update_preview()
     
     def adjust_to_aspect_ratio(self, width, height):
         """根据固定比例调整宽度和高度"""
@@ -1265,6 +1378,10 @@ class CropDialog:
         self.selection_coords = (x1, y1, x2, y2)
         self.draw_handles(x1, y1, x2, y2)
         self.update_size_label()
+        
+        # 如果处于预览模式，更新预览
+        if self.is_preview_mode:
+            self.update_preview()
     
     def adjust_coords_with_ratio(self, x1, y1, x2, y2, handle):
         """根据固定比例调整坐标"""

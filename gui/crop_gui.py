@@ -338,15 +338,8 @@ class GUIBuilder:
         # 添加鼠标悬浮提示
         self.create_tooltip(self.widgets['crop_btn'], "确认裁剪")
 
-        # 保存按钮
-        self.widgets['save_btn'] = ttk.Button(
-            btn_row,
-            text="💾",
-            command=self.callbacks['save_cropped_image']
-        )
-        self.widgets['save_btn'].pack(side="left", padx=5, fill="x", expand=True)
         # 添加鼠标悬浮提示
-        self.create_tooltip(self.widgets['save_btn'], "保存裁剪")
+        self.create_tooltip(self.widgets['crop_btn'], "确认裁剪")
     
     
     

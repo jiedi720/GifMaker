@@ -736,15 +736,7 @@ class CropDialog:
             tags=("preview_text", "preview_region")
         )
 
-        # 添加提示信息
-        hint_text = "点击外部区域关闭预览"
-        canvas.create_text(
-            canvas_width // 2, canvas_height - 20,
-            text=hint_text,
-            fill="white",
-            font=("Arial", 10),
-            tags=("preview_text", "preview_region")
-        )
+        # 移除"点击外部区域关闭预览"的提示，因为现在只通过按钮控制
 
         # 不再绑定点击事件来关闭预览，只通过按钮控制
         # self.preview_bind_id = canvas.bind("<Button-1>", self.close_preview, add="+")
@@ -1214,6 +1206,9 @@ class CropDialog:
         x2 = self.start_x + width
         y2 = self.start_y + height
 
+        # 确保裁剪框不超出图片边界
+        x1, y1, x2, y2 = self.clamp_to_image_bounds(x1, y1, x2, y2)
+
         if self.current_rect:
             canvas.delete(self.current_rect)
         self.clear_handles()
@@ -1366,10 +1361,9 @@ class CropDialog:
         if width > limited_width or height > limited_height:
             width = limited_width
             height = limited_height
-            if x1 + width > img_right:
-                x1 = img_right - width
-            if y1 + height > img_bottom:
-                y1 = img_bottom - height
+            # 确保调整后的尺寸不会超出边界
+            x1 = max(img_left, min(x1, img_right - width))
+            y1 = max(img_top, min(y1, img_bottom - height))
             x2 = x1 + width
             y2 = y1 + height
         
@@ -1485,16 +1479,20 @@ class CropDialog:
                     x1 = x2 - new_width
         elif handle in ['n', 's']:
             new_width = height * self.current_ratio
-            if handle == 'n':
-                x2 = x1 + new_width
-            else:
-                x2 = x1 + new_width
+            # 根据新的高度和固定比例计算新的宽度
+            # 保持中心点不变来调整x坐标
+            center_x = (x1 + x2) / 2
+            half_width = new_width / 2
+            x1 = center_x - half_width
+            x2 = center_x + half_width
         elif handle in ['e', 'w']:
             new_height = width / self.current_ratio
-            if handle == 'w':
-                y2 = y1 + new_height
-            else:
-                y2 = y1 + new_height
+            # 根据新的宽度和固定比例计算新的高度
+            # 保持中心点不变来调整y坐标
+            center_y = (y1 + y2) / 2
+            half_height = new_height / 2
+            y1 = center_y - half_height
+            y2 = center_y + half_height
         
         return x1, y1, x2, y2
     

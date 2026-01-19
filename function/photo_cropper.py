@@ -50,6 +50,9 @@ class PhotoCropper:
         self.drag_start_pos = None      # 拖拽起始位置
         self.drag_start_coords = None   # 拖拽起始坐标
         self.handle_size = 8            # 控制点大小
+
+        # 预览窗口相关变量
+        self.preview_window = None      # 预览窗口对象
         
         # 设置固定比例字典（宽:高）
         self.aspect_ratios = {

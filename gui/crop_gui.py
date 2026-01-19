@@ -480,6 +480,7 @@ class CropDialog:
         # 预览模式相关变量
         self.is_preview_mode = False  # 是否处于预览模式
         self.preview_bind_id = None  # 预览点击事件绑定ID
+        self.is_during_drag_operation = False  # 是否在拖动操作期间
         
         # 创建GUI界面
         self.setup_gui()
@@ -490,7 +491,10 @@ class CropDialog:
         
         # 加载图片（在窗口显示后，确保画布尺寸正确）
         self.load_image(image_path)
-        
+
+        # 初始化预览按钮状态
+        self.update_preview_button_state()
+
         # 等待对话框关闭
         self.dialog.wait_window()
     
@@ -527,9 +531,13 @@ class CropDialog:
             'preview_crop': self.preview_crop,
             'navigate_image': self.navigate_image
         }
-        
+
         # 创建GUI构建器
         self.gui = GUIBuilder(self.dialog, callbacks)
+
+        # 配置按钮样式
+        self.style = ttk.Style()
+        self.style.configure('Active.TButton', background='#cccccc', foreground='black')
     
     def load_image(self, image_path):
         """加载图片文件"""
@@ -586,59 +594,90 @@ class CropDialog:
             self.update_current_image_label()
             self.load_image(self.image_paths[self.current_image_index])
     
-    def preview_crop(self):
-        """预览裁剪结果 - 在原图上显示"""
+    def toggle_preview_crop(self):
+        """切换预览裁剪模式 - 进入/退出裁剪预览"""
         if not self.original_image or not self.selection_coords:
             messagebox.showwarning("警告", "请先在图像上选择裁剪区域")
             return
-        
-        try:
-            x1, y1, x2, y2 = self.selection_coords
-            
-            img_x1 = (x1 - self.image_offset_x) / self.scale_factor
-            img_y1 = (y1 - self.image_offset_y) / self.scale_factor
-            img_x2 = (x2 - self.image_offset_x) / self.scale_factor
-            img_y2 = (y2 - self.image_offset_y) / self.scale_factor
-            
-            img_x1, img_x2 = min(img_x1, img_x2), max(img_x1, img_x2)
-            img_y1, img_y2 = min(img_y1, img_y2), max(img_y1, img_y2)
-            
-            cropped_image = self.original_image.crop((img_x1, img_y1, img_x2, img_y2))
-            
-            # 设置预览模式标志
-            self.is_preview_mode = True
-            
-            # 在原图上显示裁剪预览
-            self.show_crop_on_canvas(cropped_image, x1, y1, x2, y2)
-            
-        except Exception as e:
-            messagebox.showerror("错误", f"预览失败：{str(e)}")
+
+        # 如果当前处于预览模式，则退出预览模式
+        if self.is_preview_mode:
+            self.close_preview()
+        else:
+            # 进入预览模式
+            try:
+                x1, y1, x2, y2 = self.selection_coords
+
+                img_x1 = (x1 - self.image_offset_x) / self.scale_factor
+                img_y1 = (y1 - self.image_offset_y) / self.scale_factor
+                img_x2 = (x2 - self.image_offset_x) / self.scale_factor
+                img_y2 = (y2 - self.image_offset_y) / self.scale_factor
+
+                img_x1, img_x2 = min(img_x1, img_x2), max(img_x1, img_x2)
+                img_y1, img_y2 = min(img_y1, img_y2), max(img_y1, img_y2)
+
+                cropped_image = self.original_image.crop((img_x1, img_y1, img_x2, img_y2))
+
+                # 设置预览模式标志
+                self.is_preview_mode = True
+
+                # 在原图上显示裁剪预览
+                self.show_crop_on_canvas(cropped_image, x1, y1, x2, y2)
+
+                # 更新按钮文本
+                self.update_preview_button_state()
+
+            except Exception as e:
+                messagebox.showerror("错误", f"预览失败：{str(e)}")
+
+    def update_preview_button_state(self):
+        """更新预览按钮的状态显示"""
+        if hasattr(self, 'gui'):
+            button = self.gui.get_widget('preview_crop_btn')
+            if button:
+                if self.is_preview_mode:
+                    button.config(text="退出预览")
+                    # 更改按钮的样式以表示激活状态
+                    button.config(style='Active.TButton')
+                else:
+                    button.config(text="裁剪预览")
+                    button.config(style='TButton')
+
+    def preview_crop(self):
+        """预览裁剪结果 - 在原图上显示（保持原有方法兼容性）"""
+        self.toggle_preview_crop()
     
     def show_crop_on_canvas(self, cropped_image, x1, y1, x2, y2):
         """在画布上显示裁剪预览"""
         canvas = self.gui.get_widget('canvas')
-        
+
         # 确保坐标顺序正确
         x1, x2 = min(x1, x2), max(x1, x2)
         y1, y2 = min(y1, y2), max(y1, y2)
-        
+
         # 计算裁剪区域的大小
         crop_width = x2 - x1
         crop_height = y2 - y1
-        
+
+        # 先删除旧的预览图层
+        canvas.delete("preview_mask")
+        canvas.delete("preview_area")
+        canvas.delete("preview_image")
+        canvas.delete("preview_text")
+
         # 在画布上创建一个半透明的遮罩层
         # 先创建一个覆盖整个画布的半透明黑色矩形
         canvas_width = canvas.winfo_width()
         canvas_height = canvas.winfo_height()
-        
+
         # 创建半透明遮罩（使用 stipple 模拟透明效果）
         canvas.create_rectangle(
             0, 0, canvas_width, canvas_height,
             fill="black",
             stipple="gray50",
-            tags="preview_mask"
+            tags=("preview_mask", "preview_region")
         )
-        
+
         # 清除裁剪区域的遮罩，让裁剪区域清晰显示
         # 在裁剪区域绘制一个白色矩形作为背景
         canvas.create_rectangle(
@@ -646,15 +685,15 @@ class CropDialog:
             fill="white",
             outline="yellow",
             width=3,
-            tags="preview_area"
+            tags=("preview_area", "preview_region")
         )
-        
+
         # 在裁剪区域显示裁剪后的图片
         # 计算缩放比例以适应裁剪区域
         img_width, img_height = cropped_image.size
         scale_x = crop_width / img_width
         scale_y = crop_height / img_height
-        
+
         # 如果裁剪区域比原图小，需要缩放
         if scale_x < 1 or scale_y < 1:
             scale = min(scale_x, scale_y)
@@ -668,25 +707,25 @@ class CropDialog:
             cropped_display = cropped_image
             display_width = crop_width
             display_height = crop_height
-        
+
         # 转换为 Tkinter 图像对象
         preview_photo = ImageTk.PhotoImage(cropped_display)
-        
+
         # 居中显示在裁剪区域内
         offset_x = x1 + (crop_width - display_width) // 2
         offset_y = y1 + (crop_height - display_height) // 2
-        
+
         # 在裁剪区域显示预览图片
         canvas.create_image(
             offset_x, offset_y,
             image=preview_photo,
             anchor=tk.NW,
-            tags="preview_image"
+            tags=("preview_image", "preview_region")
         )
-        
+
         # 保存引用以防止被垃圾回收
         canvas.preview_photo = preview_photo
-        
+
         # 显示裁剪尺寸信息
         info_text = f"裁剪尺寸: {img_width} x {img_height} 像素"
         canvas.create_text(
@@ -694,59 +733,71 @@ class CropDialog:
             text=info_text,
             fill="yellow",
             font=("Arial", 10, "bold"),
-            tags="preview_text"
+            tags=("preview_text", "preview_region")
         )
-        
+
         # 添加提示信息
-        hint_text = "点击任意位置关闭预览"
+        hint_text = "点击外部区域关闭预览"
         canvas.create_text(
             canvas_width // 2, canvas_height - 20,
             text=hint_text,
             fill="white",
             font=("Arial", 10),
-            tags="preview_text"
+            tags=("preview_text", "preview_region")
         )
-        
-        # 绑定点击事件来关闭预览，并保存绑定ID
-        self.preview_bind_id = canvas.bind("<Button-1>", self.close_preview, add="+")
+
+        # 不再绑定点击事件来关闭预览，只通过按钮控制
+        # self.preview_bind_id = canvas.bind("<Button-1>", self.close_preview, add="+")
     
     def close_preview(self, event=None):
         """关闭预览"""
+        # 如果正在拖动操作中，不执行关闭操作
+        if self.is_during_drag_operation:
+            return
+
         canvas = self.gui.get_widget('canvas')
         canvas.delete("preview_mask")
         canvas.delete("preview_area")
         canvas.delete("preview_image")
         canvas.delete("preview_text")
-        
+
         # 清除预览模式标志
         self.is_preview_mode = False
-        
-        # 解绑点击事件
-        if self.preview_bind_id:
-            canvas.unbind("<Button-1>", self.preview_bind_id)
-            self.preview_bind_id = None
+
+        # 更新按钮状态
+        self.update_preview_button_state()
     
     def update_preview(self):
         """更新预览 - 在移动或调整裁剪框时实时更新预览"""
         if not self.original_image or not self.selection_coords:
             return
-        
+
         try:
             x1, y1, x2, y2 = self.selection_coords
-            
+
             img_x1 = (x1 - self.image_offset_x) / self.scale_factor
             img_y1 = (y1 - self.image_offset_y) / self.scale_factor
             img_x2 = (x2 - self.image_offset_x) / self.scale_factor
             img_y2 = (y2 - self.image_offset_y) / self.scale_factor
-            
+
             img_x1, img_x2 = min(img_x1, img_x2), max(img_x1, img_x2)
             img_y1, img_y2 = min(img_y1, img_y2), max(img_y1, img_y2)
-            
+
             cropped_image = self.original_image.crop((img_x1, img_y1, img_x2, img_y2))
-            
+
             # 更新预览显示
             self.show_crop_on_canvas(cropped_image, x1, y1, x2, y2)
-            
+
+            # 将裁剪框和控制点提升到最上层，确保可以交互
+            canvas = self.gui.get_widget('canvas')
+            if self.current_rect:
+                canvas.tag_raise(self.current_rect)
+            for handle in self.handles.values():
+                canvas.tag_raise(handle)
+
+            # 保持预览模式状态
+            self.is_preview_mode = True
+
         except Exception as e:
             pass  # 静默处理错误，避免在拖动时弹出错误窗口
     
@@ -1034,25 +1085,48 @@ class CropDialog:
         """鼠标按下事件"""
         if not self.original_image:
             return
-        
-        # 如果处于预览模式，点击任意位置关闭预览
+
+        # 如果处于预览模式，检查点击位置
         if self.is_preview_mode:
-            self.close_preview()
+            # 检查是否点击了控制点
+            handle = self.get_handle_at_position(event.x, event.y)
+            if handle:
+                # 点击控制点，保持预览模式并开始拖动
+                self.dragging_handle = handle
+                self.drag_start_pos = (event.x, event.y)
+                self.drag_start_coords = self.selection_coords
+                # 标记正在进行拖动操作
+                self.is_during_drag_operation = True
+                return
+
+            # 检查是否点击了裁剪框内部
+            if self.selection_coords and self.is_point_in_rect(event.x, event.y, self.selection_coords):
+                # 点击裁剪框内部，保持预览模式并开始移动
+                self.is_moving_rect = True
+                self.drag_offset_x = event.x
+                self.drag_offset_y = event.y
+                # 标记正在进行拖动操作
+                self.is_during_drag_operation = True
+                return
+
+            # 在预览模式下，点击外部区域不再关闭预览
+            # 只有通过按钮才能退出预览模式
             return
-        
+
+        # 非预览模式的正常处理
         handle = self.get_handle_at_position(event.x, event.y)
         if handle:
             self.dragging_handle = handle
             self.drag_start_pos = (event.x, event.y)
             self.drag_start_coords = self.selection_coords
             return
-        
+
         if self.selection_coords and self.is_point_in_rect(event.x, event.y, self.selection_coords):
             self.is_moving_rect = True
             self.drag_offset_x = event.x
             self.drag_offset_y = event.y
             return
-        
+
         self.start_x = event.x
         self.start_y = event.y
         self.is_moving_rect = False
@@ -1070,17 +1144,35 @@ class CropDialog:
         else:
             self.create_selection_box(event.x, event.y)
     
+    def _unbind_preview_click(self):
+        """临时解除预览的点击事件绑定（不再需要，保留以兼容）"""
+        pass
+
+    def _rebind_preview_click(self):
+        """重新绑定预览的点击事件（不再需要，保留以兼容）"""
+        pass
+
     def on_mouse_up(self, event):
         """鼠标释放事件"""
         if not self.original_image or not self.selection_coords:
             return
-        
+
         self.is_moving_rect = False
         self.dragging_handle = None
         self.drag_start_pos = None
         self.drag_start_coords = None
-        
-        self.gui.get_widget('crop_btn').config(state=tk.NORMAL)
+        # 重置拖动操作标志
+        self.is_during_drag_operation = False
+
+        # 保持预览模式状态
+        if self.is_preview_mode:
+            # 在预览模式下，裁剪按钮应该保持可用状态
+            self.gui.get_widget('crop_btn').config(state=tk.NORMAL)
+            # 更新预览显示
+            self.update_preview()
+        else:
+            # 非预览模式下，裁剪按钮也应该是可用的
+            self.gui.get_widget('crop_btn').config(state=tk.NORMAL)
     
     def on_mouse_move(self, event):
         """鼠标移动事件"""
@@ -1110,22 +1202,22 @@ class CropDialog:
     def create_selection_box(self, current_x, current_y):
         """创建新的裁剪框"""
         canvas = self.gui.get_widget('canvas')
-        
+
         width = current_x - self.start_x
         height = current_y - self.start_y
-        
+
         if self.current_ratio is not None:
             width, height = self.adjust_to_aspect_ratio(width, height)
-        
+
         x1 = self.start_x
         y1 = self.start_y
         x2 = self.start_x + width
         y2 = self.start_y + height
-        
+
         if self.current_rect:
             canvas.delete(self.current_rect)
         self.clear_handles()
-        
+
         self.current_rect = canvas.create_rectangle(
             x1, y1, x2, y2,
             outline="red",
@@ -1133,11 +1225,11 @@ class CropDialog:
             dash=(5, 5),
             tags="selection"
         )
-        
+
         self.selection_coords = (x1, y1, x2, y2)
         self.draw_handles(x1, y1, x2, y2)
         self.update_size_label()
-        
+
         # 如果处于预览模式，更新预览
         if self.is_preview_mode:
             self.update_preview()
@@ -1145,36 +1237,36 @@ class CropDialog:
     def move_selection_box(self, current_x, current_y):
         """移动现有的裁剪框"""
         canvas = self.gui.get_widget('canvas')
-        
+
         if not self.selection_coords:
             return
-        
+
         dx = current_x - self.drag_offset_x
         dy = current_y - self.drag_offset_y
-        
+
         x1, y1, x2, y2 = self.selection_coords
-        
+
         if x1 > x2:
             x1, x2 = x2, x1
         if y1 > y2:
             y1, y2 = y2, y1
-        
+
         new_x1 = x1 + dx
         new_y1 = y1 + dy
         new_x2 = x2 + dx
         new_y2 = y2 + dy
-        
+
         new_x1, new_y1, new_x2, new_y2 = self.clamp_to_image_bounds(
             new_x1, new_y1, new_x2, new_y2
         )
-        
+
         actual_dx = (new_x1 - x1)
         actual_dy = (new_y1 - y1)
-        
+
         if self.current_rect:
             canvas.delete(self.current_rect)
         self.clear_handles()
-        
+
         self.current_rect = canvas.create_rectangle(
             new_x1, new_y1, new_x2, new_y2,
             outline="red",
@@ -1182,15 +1274,15 @@ class CropDialog:
             dash=(5, 5),
             tags="selection"
         )
-        
+
         self.selection_coords = (new_x1, new_y1, new_x2, new_y2)
         self.draw_handles(new_x1, new_y1, new_x2, new_y2)
-        
+
         self.drag_offset_x = self.drag_offset_x + actual_dx
         self.drag_offset_y = self.drag_offset_y + actual_dy
-        
+
         self.update_size_label()
-        
+
         # 如果处于预览模式，更新预览
         if self.is_preview_mode:
             self.update_preview()
@@ -1297,19 +1389,19 @@ class CropDialog:
         """控制点拖拽事件"""
         if not self.dragging_handle or not self.drag_start_coords:
             return
-        
+
         canvas = self.gui.get_widget('canvas')
-        
+
         dx = event.x - self.drag_start_pos[0]
         dy = event.y - self.drag_start_pos[1]
-        
+
         x1, y1, x2, y2 = self.drag_start_coords
-        
+
         if x1 > x2:
             x1, x2 = x2, x1
         if y1 > y2:
             y1, y2 = y2, y1
-        
+
         if self.dragging_handle == 'nw':
             x1 = x1 + dx
             y1 = y1 + dy
@@ -1330,20 +1422,20 @@ class CropDialog:
             y2 = y2 + dy
         elif self.dragging_handle == 'w':
             x1 = x1 + dx
-        
+
         if self.current_ratio is not None:
             x1, y1, x2, y2 = self.adjust_coords_with_ratio(x1, y1, x2, y2, self.dragging_handle)
-        
+
         x1, y1, x2, y2 = self.clamp_to_image_bounds(x1, y1, x2, y2)
-        
+
         min_size = 10
         if abs(x2 - x1) < min_size or abs(y2 - y1) < min_size:
             return
-        
+
         if self.current_rect:
             canvas.delete(self.current_rect)
         self.clear_handles()
-        
+
         self.current_rect = canvas.create_rectangle(
             x1, y1, x2, y2,
             outline="red",
@@ -1351,11 +1443,11 @@ class CropDialog:
             dash=(5, 5),
             tags="selection"
         )
-        
+
         self.selection_coords = (x1, y1, x2, y2)
         self.draw_handles(x1, y1, x2, y2)
         self.update_size_label()
-        
+
         # 如果处于预览模式，更新预览
         if self.is_preview_mode:
             self.update_preview()
@@ -1464,9 +1556,14 @@ class CropDialog:
             x - self.handle_size, y - self.handle_size,
             x + self.handle_size, y + self.handle_size
         )
-        
-        for item in items:
+
+        # 按照图层顺序倒序遍历，优先检测最上层的元素
+        for item in reversed(items):
             tags = canvas.gettags(item)
+            # 在预览模式下，忽略预览图层
+            if self.is_preview_mode:
+                if any(tag in ["preview_mask", "preview_area", "preview_image", "preview_text"] for tag in tags):
+                    continue
             if "handle" in tags:
                 for tag in tags:
                     if tag in self.handles:

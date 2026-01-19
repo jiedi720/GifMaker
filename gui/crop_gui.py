@@ -559,6 +559,12 @@ class CropDialog:
     
     def _load_image_delayed(self):
         """延迟加载图片的内部方法"""
+        # 获取画布引用
+        canvas = self.gui.get_widget('canvas')
+
+        # 暂停画布更新以减少闪烁
+        canvas.update_idletasks()
+
         # 计算缩放比例以适应画布
         self.calculate_scale_and_display()
 
@@ -578,14 +584,8 @@ class CropDialog:
             # 删除临时存储的数据
             del self._saved_selection_for_navigation
 
-            # 恢复选择框
-            self._restore_selection_from_saved(saved_data)
-
-            # 如果之前有预览模式，现在恢复它
-            was_in_preview = saved_data.get('was_in_preview', False)
-            if was_in_preview:
-                # 延迟进入预览模式，确保图片和选择框都已加载完成
-                self.dialog.after(100, self.enter_preview_mode)
+            # 使用 after 方法延迟恢复选择框，减少闪烁
+            self.dialog.after_idle(lambda: self._restore_selection_from_saved_and_update(saved_data))
         else:
             # 非导航操作，清除之前的选择框
             self.clear_selection()
@@ -595,7 +595,150 @@ class CropDialog:
 
         # 更新导航按钮状态
         self.update_navigation_buttons()
+
+        # 强制完成所有画布更新
+        canvas.update()
+
+    def _restore_selection_from_saved_and_update(self, saved_data):
+        """恢复选择框并更新预览模式"""
+        # 恢复选择框
+        self._restore_selection_from_saved(saved_data)
+
+        # 如果之前有预览模式，现在恢复它
+        was_in_preview = saved_data.get('was_in_preview', False)
+        if was_in_preview:
+            # 延迟更新预览模式，确保图片和选择框都已加载完成
+            # 为了避免闪烁，我们直接更新预览而不是关闭再打开
+            self.dialog.after(50, self._update_preview_for_new_image)
     
+    def _update_preview_for_new_image(self):
+        """为新图片更新预览，避免闪烁"""
+        if self.is_preview_mode and self.selection_coords:
+            try:
+                x1, y1, x2, y2 = self.selection_coords
+
+                img_x1 = (x1 - self.image_offset_x) / self.scale_factor
+                img_y1 = (y1 - self.image_offset_y) / self.scale_factor
+                img_x2 = (x2 - self.image_offset_x) / self.scale_factor
+                img_y2 = (y2 - self.image_offset_y) / self.scale_factor
+
+                img_x1, img_x2 = min(img_x1, img_x2), max(img_x1, img_x2)
+                img_y1, img_y2 = min(img_y1, img_y2), max(img_y1, img_y2)
+
+                cropped_image = self.original_image.crop((img_x1, img_y1, img_x2, img_y2))
+
+                # 直接更新预览，而不是关闭再打开
+                self._update_crop_preview_only(cropped_image, x1, y1, x2, y2)
+
+            except Exception as e:
+                print(f"更新预览失败: {e}")
+
+    def _update_crop_preview_only(self, cropped_image, x1, y1, x2, y2):
+        """仅更新裁剪预览，不重新创建整个预览层"""
+        canvas = self.gui.get_widget('canvas')
+
+        # 获取画布尺寸
+        canvas_width = canvas.winfo_width()
+        canvas_height = canvas.winfo_height()
+
+        if canvas_width <= 1:
+            canvas_width = 800
+        if canvas_height <= 1:
+            canvas_height = 600
+
+        # 计算裁剪区域的大小
+        crop_width = x2 - x1
+        crop_height = y2 - y1
+
+        # 为减少闪烁，先隐藏预览元素
+        canvas.update_idletasks()
+
+        # 更新预览区域，重新创建所有预览元素以确保阴影效果
+        # 删除旧的预览图层
+        canvas.delete("preview_mask")
+        canvas.delete("preview_area")
+        canvas.delete("preview_image")
+        # 只删除与预览相关的文本，保留裁剪尺寸信息
+        for item in canvas.find_withtag("preview_text"):
+            current_text = canvas.itemcget(item, "text")
+            if "点击外部区域关闭预览" in current_text:
+                canvas.delete(item)
+
+        # 在画布上创建一个半透明的遮罩层
+        # 先创建一个覆盖整个画布的半透明黑色矩形
+        canvas.create_rectangle(
+            0, 0, canvas_width, canvas_height,
+            fill="black",
+            stipple="gray50",
+            tags=("preview_mask", "preview_region")
+        )
+
+        # 清除裁剪区域的遮罩，让裁剪区域清晰显示
+        # 在裁剪区域绘制一个白色矩形作为背景
+        canvas.create_rectangle(
+            x1, y1, x2, y2,
+            fill="white",
+            outline="yellow",
+            width=3,
+            tags=("preview_area", "preview_region")
+        )
+
+        # 在裁剪区域显示裁剪后的图片
+        # 计算缩放比例以适应裁剪区域
+        img_width, img_height = cropped_image.size
+        scale_x = crop_width / img_width
+        scale_y = crop_height / img_height
+
+        # 如果裁剪区域比原图小，需要缩放
+        if scale_x < 1 or scale_y < 1:
+            scale = min(scale_x, scale_y)
+            display_width = int(img_width * scale)
+            display_height = int(img_height * scale)
+            cropped_display = cropped_image.resize(
+                (display_width, display_height),
+                Image.Resampling.LANCZOS
+            )
+        else:
+            cropped_display = cropped_image
+            display_width = crop_width
+            display_height = crop_height
+
+        # 转换为 Tkinter 图像对象
+        preview_photo = ImageTk.PhotoImage(cropped_display)
+
+        # 居中显示在裁剪区域内
+        offset_x = x1 + (crop_width - display_width) // 2
+        offset_y = y1 + (crop_height - display_height) // 2
+
+        # 在裁剪区域显示预览图片
+        canvas.create_image(
+            offset_x, offset_y,
+            image=preview_photo,
+            anchor=tk.NW,
+            tags=("preview_image", "preview_region")
+        )
+
+        # 保存引用以防止被垃圾回收
+        canvas.preview_photo = preview_photo
+
+        # 显示裁剪尺寸信息
+        info_text = f"裁剪尺寸: {img_width} x {img_height} 像素"
+        canvas.create_text(
+            x1 + crop_width // 2, y1 - 15,
+            text=info_text,
+            fill="yellow",
+            font=("Arial", 10, "bold"),
+            tags=("preview_text", "preview_region")
+        )
+
+        # 确保预览元素在最上层
+        for tag in ["preview_mask", "preview_area", "preview_image", "preview_text"]:
+            for item in canvas.find_withtag(tag):
+                canvas.tag_raise(item)
+
+        # 强制更新画布，一次性完成所有绘制
+        canvas.update()
+
     def _restore_selection_from_saved(self, saved_data):
         """从保存的坐标恢复选择框，保持原始图片上的绝对像素坐标不变"""
         if not saved_data or not self.original_image:
@@ -633,12 +776,18 @@ class CropDialog:
         new_canvas_x2 = int(orig_x2 * self.scale_factor)
         new_canvas_y2 = int(orig_y2 * self.scale_factor)
 
-        # 创建新选择框
+        # 创建新选择框 - 使用批量更新减少闪烁
         canvas = self.gui.get_widget('canvas')
+
+        # 暂停画布的屏幕更新（减少闪烁的关键）
+        canvas.update_idletasks()
+
+        # 删除旧的选择框和控制点
         if self.current_rect:
             canvas.delete(self.current_rect)
         self.clear_handles()
 
+        # 创建新选择框
         self.current_rect = canvas.create_rectangle(
             new_canvas_x1, new_canvas_y1, new_canvas_x2, new_canvas_y2,
             outline="red",
@@ -649,8 +798,19 @@ class CropDialog:
 
         # 保存新选择框坐标
         self.selection_coords = (new_canvas_x1, new_canvas_y1, new_canvas_x2, new_canvas_y2)
+
+        # 绘制控制点
         self.draw_handles(new_canvas_x1, new_canvas_y1, new_canvas_x2, new_canvas_y2)
+
+        # 更新尺寸标签
         self.update_size_label()
+
+        # 如果当前处于预览模式，更新预览而不是重新创建
+        if self.is_preview_mode:
+            self._update_preview_for_new_image()
+
+        # 强制更新画布，一次性完成所有绘制
+        canvas.update()  # 使用 update() 替代 update_idletasks()，强制立即更新
 
     def update_current_image_label(self):
         """更新当前图片显示标签"""

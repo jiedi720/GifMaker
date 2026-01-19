@@ -749,7 +749,7 @@ class CropDialog:
 
         # 检查是否有原始图片坐标
         if 'orig_coords' in saved_data:
-            # 使用原始图片坐标
+            # 直接使用原始图片上的绝对坐标
             orig_x1, orig_y1, orig_x2, orig_y2 = saved_data['orig_coords']
         else:
             # 如果没有原始图片坐标，尝试从画布坐标转换
@@ -764,17 +764,18 @@ class CropDialog:
             orig_x2 = int(x2_canvas / self.scale_factor) if self.scale_factor > 0 else 0
             orig_y2 = int(y2_canvas / self.scale_factor) if self.scale_factor > 0 else 0
 
-        # 限制在当前图片范围内
-        orig_x1 = max(0, min(orig_x1, curr_img_width))
-        orig_y1 = max(0, min(orig_y1, curr_img_height))
-        orig_x2 = max(0, min(orig_x2, curr_img_width))
-        orig_y2 = max(0, min(orig_y2, curr_img_height))
+        # 保持原始图片上的绝对坐标不变，即使超出图片边界
+        # 但确保坐标不为负数
+        new_orig_x1 = max(0, orig_x1)
+        new_orig_y1 = max(0, orig_y1)
+        new_orig_x2 = max(0, orig_x2)
+        new_orig_y2 = max(0, orig_y2)
 
         # 将原始图片坐标转换为当前显示比例下的画布坐标
-        new_canvas_x1 = int(orig_x1 * self.scale_factor)
-        new_canvas_y1 = int(orig_y1 * self.scale_factor)
-        new_canvas_x2 = int(orig_x2 * self.scale_factor)
-        new_canvas_y2 = int(orig_y2 * self.scale_factor)
+        new_canvas_x1 = int(new_orig_x1 * self.scale_factor)
+        new_canvas_y1 = int(new_orig_y1 * self.scale_factor)
+        new_canvas_x2 = int(new_orig_x2 * self.scale_factor)
+        new_canvas_y2 = int(new_orig_y2 * self.scale_factor)
 
         # 创建新选择框 - 使用批量更新减少闪烁
         canvas = self.gui.get_widget('canvas')

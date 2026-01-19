@@ -570,8 +570,26 @@ class CropDialog:
         if save_btn:
             save_btn.config(state=tk.DISABLED)
 
-        # 清除之前的选择框
-        self.clear_selection()
+        # 检查是否正在进行导航操作，如果是，则保留选择框
+        if hasattr(self, '_saved_selection_for_navigation'):
+            # 这是导航操作，保留选择框
+            saved_data = self._saved_selection_for_navigation
+            was_in_preview = saved_data['was_in_preview']
+            saved_coords = saved_data.get('coords')
+
+            # 删除临时存储的数据
+            del self._saved_selection_for_navigation
+
+            # 如果之前有预览模式，现在恢复它
+            if was_in_preview and saved_coords:
+                # 重新创建选择框（使用相对坐标）
+                self._restore_selection_from_saved(saved_coords)
+
+                # 延迟进入预览模式，确保图片和选择框都已加载完成
+                self.dialog.after(100, self.enter_preview_mode)
+        else:
+            # 非导航操作，清除之前的选择框
+            self.clear_selection()
 
         # 更新当前图片显示
         self.update_current_image_label()
@@ -579,6 +597,78 @@ class CropDialog:
         # 更新导航按钮状态
         self.update_navigation_buttons()
     
+    def _restore_selection_from_saved(self, saved_coords):
+        """从保存的坐标恢复选择框"""
+        if not saved_coords or not self.original_image:
+            return
+
+        # 计算原始图片的尺寸
+        orig_img_width, orig_img_height = self.original_image.size
+
+        # 如果之前的选择框坐标是基于原始图片的，我们需要计算相对位置
+        # 但首先需要确定保存的坐标是哪种类型
+        # 如果是基于显示图片的坐标，需要先转换为原始图片坐标
+        if self.display_image:
+            x1_orig, y1_orig, x2_orig, y2_orig = saved_coords
+
+            # 将显示坐标转换为原始图片坐标
+            orig_x1 = int(x1_orig / self.scale_factor) if self.scale_factor > 0 else 0
+            orig_y1 = int(y1_orig / self.scale_factor) if self.scale_factor > 0 else 0
+            orig_x2 = int(x2_orig / self.scale_factor) if self.scale_factor > 0 else 0
+            orig_y2 = int(y2_orig / self.scale_factor) if self.scale_factor > 0 else 0
+
+            # 限制在原始图片范围内
+            orig_x1 = max(0, min(orig_x1, orig_img_width))
+            orig_y1 = max(0, min(orig_y1, orig_img_height))
+            orig_x2 = max(0, min(orig_x2, orig_img_width))
+            orig_y2 = max(0, min(orig_y2, orig_img_height))
+
+            # 计算相对位置（百分比）
+            rel_x1 = orig_x1 / orig_img_width if orig_img_width > 0 else 0
+            rel_y1 = orig_y1 / orig_img_height if orig_img_height > 0 else 0
+            rel_x2 = orig_x2 / orig_img_width if orig_img_width > 0 else 0
+            rel_y2 = orig_y2 / orig_img_height if orig_img_height > 0 else 0
+        else:
+            # 如果没有显示图片，使用默认值
+            rel_x1, rel_y1, rel_x2, rel_y2 = 0.25, 0.25, 0.75, 0.75  # 默认中间区域
+
+        # 根据新图片的尺寸计算新坐标
+        new_x1 = int(rel_x1 * orig_img_width)
+        new_y1 = int(rel_y1 * orig_img_height)
+        new_x2 = int(rel_x2 * orig_img_width)
+        new_y2 = int(rel_y2 * orig_img_height)
+
+        # 限制坐标在图片范围内
+        new_x1 = max(0, min(new_x1, orig_img_width))
+        new_y1 = max(0, min(new_y1, orig_img_height))
+        new_x2 = max(0, min(new_x2, orig_img_width))
+        new_y2 = max(0, min(new_y2, orig_img_height))
+
+        # 计算在当前显示比例下的坐标
+        new_scaled_x1 = int(new_x1 * self.scale_factor)
+        new_scaled_y1 = int(new_y1 * self.scale_factor)
+        new_scaled_x2 = int(new_x2 * self.scale_factor)
+        new_scaled_y2 = int(new_y2 * self.scale_factor)
+
+        # 创建新选择框
+        canvas = self.gui.get_widget('canvas')
+        if self.current_rect:
+            canvas.delete(self.current_rect)
+        self.clear_handles()
+
+        self.current_rect = canvas.create_rectangle(
+            new_scaled_x1, new_scaled_y1, new_scaled_x2, new_scaled_y2,
+            outline="red",
+            width=2,
+            dash=(5, 5),
+            tags="selection"
+        )
+
+        # 保存新选择框坐标
+        self.selection_coords = (new_scaled_x1, new_scaled_y1, new_scaled_x2, new_scaled_y2)
+        self.draw_handles(new_scaled_x1, new_scaled_y1, new_scaled_x2, new_scaled_y2)
+        self.update_size_label()
+
     def update_current_image_label(self):
         """更新当前图片显示标签"""
         label = self.gui.get_widget('current_img_label')
@@ -601,27 +691,37 @@ class CropDialog:
                         btn.config(state=tk.DISABLED)
 
     def navigate_image(self, direction):
-        """导航到其他图片"""
-        if not self.image_paths or len(self.image_paths) <= 1:
-            return
-
-        old_index = self.current_image_index
-
-        if direction == 'first':
-            self.current_image_index = 0
-        elif direction == 'prev':
-            self.current_image_index = max(0, self.current_image_index - 1)
-        elif direction == 'next':
-            self.current_image_index = min(len(self.image_paths) - 1, self.current_image_index + 1)
-        elif direction == 'last':
-            self.current_image_index = len(self.image_paths) - 1
-
-        # 如果索引改变了，加载新图片
-        if old_index != self.current_image_index:
-            # 立即更新当前图片标签显示
-            self.update_current_image_label()
-            self.load_image(self.image_paths[self.current_image_index])
+            """导航到其他图片"""
+            if not self.image_paths or len(self.image_paths) <= 1:
+                return
+            
+            # 保存当前的预览模式状态
+            was_in_preview_mode = self.is_preview_mode
+            
+            old_index = self.current_image_index
     
+            if direction == 'first':
+                self.current_image_index = 0
+            elif direction == 'prev':
+                self.current_image_index = max(0, self.current_image_index - 1)
+            elif direction == 'next':
+                self.current_image_index = min(len(self.image_paths) - 1, self.current_image_index + 1)
+            elif direction == 'last':
+                self.current_image_index = len(self.image_paths) - 1
+    
+            # 如果索引改变了，加载新图片
+            if old_index != self.current_image_index:
+                # 立即更新当前图片标签显示
+                self.update_current_image_label()
+
+                # 在加载新图片前，保存当前的选择框信息
+                self._saved_selection_for_navigation = {
+                    'coords': self.selection_coords,
+                    'was_in_preview': was_in_preview_mode
+                }
+
+                self.load_image(self.image_paths[self.current_image_index])
+
     def toggle_preview_crop(self):
         """切换预览裁剪模式 - 进入/退出裁剪预览"""
         if not self.original_image or not self.selection_coords:
@@ -657,6 +757,45 @@ class CropDialog:
 
             except Exception as e:
                 messagebox.showerror("错误", f"预览失败：{str(e)}")
+
+    def enter_preview_mode(self):
+        """进入裁剪预览模式"""
+        if not self.original_image or not self.selection_coords:
+            return
+
+        try:
+            # 如果当前已经是预览模式，先关闭当前预览
+            if self.is_preview_mode:
+                # 临时保存预览模式状态
+                was_in_preview = self.is_preview_mode
+                # 关闭当前预览
+                self.close_preview()
+                # 恢复预览状态标记
+                self.is_preview_mode = was_in_preview
+
+            x1, y1, x2, y2 = self.selection_coords
+
+            img_x1 = (x1 - self.image_offset_x) / self.scale_factor
+            img_y1 = (y1 - self.image_offset_y) / self.scale_factor
+            img_x2 = (x2 - self.image_offset_x) / self.scale_factor
+            img_y2 = (y2 - self.image_offset_y) / self.scale_factor
+
+            img_x1, img_x2 = min(img_x1, img_x2), max(img_x1, img_x2)
+            img_y1, img_y2 = min(img_y1, img_y2), max(img_y1, img_y2)
+
+            cropped_image = self.original_image.crop((img_x1, img_y1, img_x2, img_y2))
+
+            # 设置预览模式标志
+            self.is_preview_mode = True
+
+            # 在原图上显示裁剪预览
+            self.show_crop_on_canvas(cropped_image, x1, y1, x2, y2)
+
+            # 更新按钮文本
+            self.update_preview_button_state()
+
+        except Exception as e:
+            pass  # 静默处理错误，避免在切换图片时弹出错误窗口
 
     def update_preview_button_state(self):
         """更新预览按钮的状态显示"""
@@ -1710,7 +1849,7 @@ def show_crop_dialog(root, image_path, image_paths, current_index):
         current_index: 当前图片索引
     
     Returns:
-        裁剪结果字典，包含裁剪坐标信息；如果用户取消则返回None
+        裁剪结果字典，包含裁剪坐标信息；如果用户取消则返��None
     """
     dialog = CropDialog(root, image_path, image_paths, current_index)
     return dialog.result

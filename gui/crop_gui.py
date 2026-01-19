@@ -327,16 +327,26 @@ class GUIBuilder:
         # 操作按钮行
         btn_row = ttk.Frame(self.widgets['modules_container'])
         btn_row.pack(fill="x", pady=(0, 10))
-        
+
         # 确认裁剪按钮
         self.widgets['crop_btn'] = ttk.Button(
-            btn_row, 
-            text="✅", 
+            btn_row,
+            text="✅",
             command=self.callbacks['confirm_crop']
         )
         self.widgets['crop_btn'].pack(side="left", padx=5, fill="x", expand=True)
         # 添加鼠标悬浮提示
         self.create_tooltip(self.widgets['crop_btn'], "确认裁剪")
+
+        # 保存按钮
+        self.widgets['save_btn'] = ttk.Button(
+            btn_row,
+            text="💾",
+            command=self.callbacks['save_cropped_image']
+        )
+        self.widgets['save_btn'].pack(side="left", padx=5, fill="x", expand=True)
+        # 添加鼠标悬浮提示
+        self.create_tooltip(self.widgets['save_btn'], "保存裁剪")
     
     
     
@@ -495,6 +505,9 @@ class CropDialog:
         # 初始化预览按钮状态
         self.update_preview_button_state()
 
+        # 更新导航按钮状态
+        self.update_navigation_buttons()
+
         # 等待对话框关闭
         self.dialog.wait_window()
     
@@ -555,16 +568,23 @@ class CropDialog:
         """延迟加载图片的内部方法"""
         # 计算缩放比例以适应画布
         self.calculate_scale_and_display()
-        
+
         # 启用裁剪按钮
         self.gui.get_widget('crop_btn').config(state=tk.NORMAL)
-        self.gui.get_widget('save_btn').config(state=tk.DISABLED)
-        
+
+        # 禁用保存按钮（直到用户确认裁剪）
+        save_btn = self.gui.get_widget('save_btn')
+        if save_btn:
+            save_btn.config(state=tk.DISABLED)
+
         # 清除之前的选择框
         self.clear_selection()
-        
+
         # 更新当前图片显示
         self.update_current_image_label()
+
+        # 更新导航按钮状态
+        self.update_navigation_buttons()
     
     def update_current_image_label(self):
         """更新当前图片显示标签"""
@@ -572,13 +592,28 @@ class CropDialog:
         if label:
             label.config(text=f"{self.current_image_index + 1} / {len(self.image_paths)}")
     
+    def update_navigation_buttons(self):
+        """更新导航按钮的状态"""
+        if hasattr(self, 'gui'):
+            nav_buttons = ['first_btn', 'prev_btn', 'next_btn', 'last_btn']
+            # 根据图片数量启用或禁用导航按钮
+            enable_nav = len(self.image_paths) > 1
+
+            for btn_name in nav_buttons:
+                btn = self.gui.get_widget(btn_name)
+                if btn:
+                    if enable_nav:
+                        btn.config(state=tk.NORMAL)
+                    else:
+                        btn.config(state=tk.DISABLED)
+
     def navigate_image(self, direction):
         """导航到其他图片"""
         if not self.image_paths or len(self.image_paths) <= 1:
             return
-        
+
         old_index = self.current_image_index
-        
+
         if direction == 'first':
             self.current_image_index = 0
         elif direction == 'prev':
@@ -587,7 +622,7 @@ class CropDialog:
             self.current_image_index = min(len(self.image_paths) - 1, self.current_image_index + 1)
         elif direction == 'last':
             self.current_image_index = len(self.image_paths) - 1
-        
+
         # 如果索引改变了，加载新图片
         if old_index != self.current_image_index:
             # 立即更新当前图片标签显示

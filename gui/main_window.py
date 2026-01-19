@@ -363,7 +363,7 @@ class GifMakerGUI:
         self.drag_preview_photo = None  # 拖拽预览PhotoImage
         self.insert_cursor = None  # 插入光标
         self.insert_index = -1  # 插入位置索引
-        self.drag_threshold = 10  # 拖动阈值（像素），只有移动超过这个距离才进入拖动模式
+        self.drag_threshold = 30  # 拖动阈值（像素），只有移动超过这个距离才进入拖动模式
         self.is_dragging = False  # 是否已经进入拖动模式
 
         # 绑定鼠标拖拽事件

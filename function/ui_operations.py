@@ -155,14 +155,14 @@ def enter_crop_mode(main_window_instance):
             current_selection = main_window_instance.file_combobox.current()
             if current_selection >= 0 and current_selection < len(main_window_instance.image_paths):
                 current_image_path = main_window_instance.image_paths[current_selection]
-                current_index = current_selection
                 # 选择单个文件时，只传递当前图片，禁用导航功能
                 target_paths = [current_image_path]
+                current_index = 0  # 只有一张图片，索引必须是 0
             else:
                 current_image_path = main_window_instance.image_paths[0]
-                current_index = 0
                 # 选择单个文件时，只传递当前图片，禁用导航功能
                 target_paths = [current_image_path]
+                current_index = 0  # 只有一张图片，索引必须是 0
 
         result = show_crop_dialog(
             main_window_instance.root,

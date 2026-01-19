@@ -156,13 +156,13 @@ def enter_crop_mode(main_window_instance):
             if current_selection >= 0 and current_selection < len(main_window_instance.image_paths):
                 current_image_path = main_window_instance.image_paths[current_selection]
                 current_index = current_selection
-                # 使用所有已加载的图片列表，而不是只包含当前图片的列表
-                target_paths = main_window_instance.image_paths
+                # 选择单个文件时，只传递当前图片，禁用导航功能
+                target_paths = [current_image_path]
             else:
                 current_image_path = main_window_instance.image_paths[0]
                 current_index = 0
-                # 使用所有已加载的图片列表，而不是只包含当前图片的列表
-                target_paths = main_window_instance.image_paths
+                # 选择单个文件时，只传递当前图片，禁用导航功能
+                target_paths = [current_image_path]
 
         result = show_crop_dialog(
             main_window_instance.root,

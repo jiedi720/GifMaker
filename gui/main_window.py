@@ -822,6 +822,23 @@ class GifMakerGUI:
                     anchor=tk.CENTER,
                     tags="drag_preview"
                 )
+                
+                # 如果是单张图片，在图标上方显示文件名
+                if len(self.selected_image_indices) == 1:
+                    # 截断过长的文件名
+                    max_name_length = 20  # 增加最大长度
+                    display_name = filename
+                    if len(display_name) > max_name_length:
+                        display_name = display_name[:max_name_length - 3] + "..."
+
+                    # 显示文件名（在图标正上方，增加间距避免重叠）
+                    self.preview_canvas.create_text(
+                        x, y - icon_size // 2 - 30,  # 增加间距
+                        text=display_name,
+                        font=("Arial", 10, "bold"),  # 使用粗体提高可读性
+                        fill="#000000",  # 使用纯黑色
+                        tags="drag_preview"
+                    )
             else:
                 # 如果图标不存在，使用原来的文字显示
                 icon_size = 40
@@ -846,16 +863,17 @@ class GifMakerGUI:
                 )
 
                 # 显示文件名（截断过长的文件名）
-                max_name_length = 10
+                max_name_length = 20  # 增加最大长度
                 display_name = filename
                 if len(display_name) > max_name_length:
                     display_name = display_name[:max_name_length - 3] + "..."
 
+                # 显示文件名（在图标正上方，增加间距避免重叠）
                 self.preview_canvas.create_text(
-                    x, y + 15,
+                    x, y - icon_size // 2 - 30,  # 增加间距
                     text=display_name,
-                    font=("Arial", font_size),
-                    fill="#333333",
+                    font=("Arial", 10, "bold"),  # 使用粗体提高可读性
+                    fill="#000000",  # 使用纯黑色
                     tags="drag_preview"
                 )
 

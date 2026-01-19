@@ -918,43 +918,48 @@ class CropDialog:
         """更新尺寸标签显示"""
         if not self.selection_coords:
             return
-        
+
         x1, y1, x2, y2 = self.selection_coords
-        
+
         # 确保坐标顺序正确
         if x1 > x2:
             x1, x2 = x2, x1
         if y1 > y2:
             y1, y2 = y2, y1
-        
+
         # 转换为图像坐标
         img_x1 = int((x1 - self.image_offset_x) / self.scale_factor)
         img_y1 = int((y1 - self.image_offset_y) / self.scale_factor)
         img_x2 = int((x2 - self.image_offset_x) / self.scale_factor)
         img_y2 = int((y2 - self.image_offset_y) / self.scale_factor)
-        
+
         width = img_x2 - img_x1
         height = img_y2 - img_y1
-        
+
         # 更新尺寸标签
         size_label = self.gui.get_widget('size_label')
         if size_label:
             size_label.config(text=f"尺寸: {width} x {height} 像素")
-        
+
         # 更新比例显示
         self.update_ratio_display()
-        
+
         # 更新坐标输入框
         x1_var = self.gui.get_widget('x1_var')
         y1_var = self.gui.get_widget('y1_var')
         x2_var = self.gui.get_widget('x2_var')
         y2_var = self.gui.get_widget('y2_var')
-        
+
         if x1_var and y1_var and x2_var and y2_var:
             x1_var.set(str(max(0, img_x1)))
             y1_var.set(str(max(0, img_y1)))
             x2_var.set(str(max(0, img_x2)))
             y2_var.set(str(max(0, img_y2)))
+
+        # 启用保存按钮，因为现在有了选择区域
+        save_btn = self.gui.get_widget('save_btn')
+        if save_btn:
+            save_btn.config(state=tk.NORMAL)
     
     def update_ratio_display(self):
         """更新当前比例显示"""
@@ -1200,6 +1205,12 @@ class CropDialog:
         else:
             # 非预览模式下，裁剪按钮也应该是可用的
             self.gui.get_widget('crop_btn').config(state=tk.NORMAL)
+
+        # 如果有选择区域，启用保存按钮
+        if self.selection_coords:
+            save_btn = self.gui.get_widget('save_btn')
+            if save_btn:
+                save_btn.config(state=tk.NORMAL)
     
     def on_mouse_move(self, event):
         """鼠标移动事件"""
@@ -1539,6 +1550,11 @@ class CropDialog:
             self.current_rect = None
         self.clear_handles()
         self.selection_coords = None
+
+        # 禁用保存按钮，因为没有选择区域
+        save_btn = self.gui.get_widget('save_btn')
+        if save_btn:
+            save_btn.config(state=tk.DISABLED)
     
     def draw_handles(self, x1, y1, x2, y2):
         """绘制裁剪框的控制点"""

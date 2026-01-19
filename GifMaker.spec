@@ -4,7 +4,13 @@ import sys
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules, collect_all
 
 # Get the absolute path of the current directory
-current_dir = os.path.dirname(os.path.abspath(__file__))
+# 使用 sys.argv[0] 获取 spec 文件路径，因为 __file__ 在 PyInstaller 中不可用
+if hasattr(sys, '_MEIPASS'):
+    # 如果是在打包后的环境中运行
+    current_dir = sys._MEIPASS
+else:
+    # 如果是在开发环境中运行
+    current_dir = os.path.dirname(os.path.abspath(sys.argv[0])) if len(sys.argv) > 0 else os.getcwd()
 
 # Full path to the icon file
 ICON_PATH = os.path.join(current_dir, 'icons', 'gif.png')

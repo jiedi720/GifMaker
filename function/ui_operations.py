@@ -180,7 +180,7 @@ def enter_crop_mode(main_window_instance):
             from function.crop_backup import crop_image
 
             if result.get('is_base_image', False):
-
+                # 如果是基础图片模式，使用返回的裁剪坐标
                 crop_coords = result.get('crop_coords', {})
 
                 # 保存裁剪坐标和裁剪后的图片
@@ -194,20 +194,39 @@ def enter_crop_mode(main_window_instance):
                             cropped_img = crop_image(img, x1, y1, x2, y2)
                             main_window_instance.pending_crops[img_path] = cropped_img
             else:
-
+                # 如果是单个裁剪结果，需要确定应用到哪些图片
                 start_pos = result['start']
                 end_pos = result['end']
-                current_img_path = current_image_path
 
-                main_window_instance.pending_crop_coords[current_img_path] = (
-                    start_pos[0], start_pos[1], end_pos[0], end_pos[1]
-                )
-                # 加载图片并应用裁剪
-                img = load_image(current_img_path)
-                if img:
-                    x1, y1, x2, y2 = start_pos[0], start_pos[1], end_pos[0], end_pos[1]
-                    cropped_img = crop_image(img, x1, y1, x2, y2)
-                    main_window_instance.pending_crops[current_img_path] = cropped_img
+                # 如果用户选择了多个图片，则将相同的裁剪区域应用到所有选中的图片
+                if main_window_instance.selected_image_indices and len(main_window_instance.selected_image_indices) > 1:
+                    # 获取所有选中的图片路径
+                    target_indices = sorted(main_window_instance.selected_image_indices)
+                    target_paths = [main_window_instance.image_paths[i] for i in target_indices]
+
+                    # 将相同的裁剪区域应用到所有选中的图片
+                    for img_path in target_paths:
+                        main_window_instance.pending_crop_coords[img_path] = (
+                            start_pos[0], start_pos[1], end_pos[0], end_pos[1]
+                        )
+                        # 加载图片并应用裁剪
+                        img = load_image(img_path)
+                        if img:
+                            x1, y1, x2, y2 = start_pos[0], start_pos[1], end_pos[0], end_pos[1]
+                            cropped_img = crop_image(img, x1, y1, x2, y2)
+                            main_window_instance.pending_crops[img_path] = cropped_img
+                else:
+                    # 单个图片的情况，只应用到当前图片
+                    current_img_path = current_image_path
+                    main_window_instance.pending_crop_coords[current_img_path] = (
+                        start_pos[0], start_pos[1], end_pos[0], end_pos[1]
+                    )
+                    # 加载图片并应用裁剪
+                    img = load_image(current_img_path)
+                    if img:
+                        x1, y1, x2, y2 = start_pos[0], start_pos[1], end_pos[0], end_pos[1]
+                        cropped_img = crop_image(img, x1, y1, x2, y2)
+                        main_window_instance.pending_crops[current_img_path] = cropped_img
 
             # 更新图片列表
             main_window_instance.display_grid_preview()

@@ -1,21 +1,25 @@
 @echo off
-:: Disable command echoing to keep the terminal output clean.
+:: Simple dependency installation script
 
-echo Installing required dependencies for the subtitle corpus search tool...
-:: Notify the user that the dependency installation process has started.
+echo Installing dependencies...
 
-pip install -r requirements.txt
-:: Use the Python package manager to install all required libraries listed in requirements.txt.
+:: Upgrade pip
+python -m pip install --upgrade pip
 
-echo.
-:: Insert a blank line for readability.
+:: Install dependencies
+python -m pip install -r requirements.txt
 
-echo Dependency installation completed successfully!
-echo.
+:: Check installation result
+if %errorlevel% == 0 (
+    echo.
+    echo Dependencies installed successfully!
+    echo.
+    echo You can run your Python scripts using:
+    echo python script_name.py
+) else (
+    echo.
+    echo Dependency installation failed, please check error messages.
+)
 
-echo You can now run the program using:
-echo python CorpusSearchTool.py
-echo.
-
-pause
-:: Keep the terminal window open until a key is pressed.
+echo Press any key to continue...
+pause >nul
